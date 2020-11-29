@@ -104,7 +104,7 @@ if isMeshFile:
 
 ###############view app output control ############
 # generate image by python + command line program written in C++
-ThicknessViewApp = os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occProjector/build/occ_projector"
+ThicknessViewApp = os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occProjector/build/occProjector"
 # usage   --bbox
 if not os.path.exists(ThicknessViewApp):
     print(ThicknessViewApp, " not found, check your path in your parameter file")
