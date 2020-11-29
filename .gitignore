@@ -1,0 +1,14 @@
+test*/*
+*/build/*
+
+*/*.png
+*/*.csv
+*.txt
+
+*.pdf
+#*.docx
+literature/*
+
+*.pyc
+
+occQt/*
