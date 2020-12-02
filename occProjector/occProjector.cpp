@@ -6,6 +6,7 @@
 #include <array>
 #include <vector>
 #include <map>
+#include <set>
 #include <memory>
 #include <unordered_map>
 #include <algorithm>    // std::sort
@@ -176,6 +177,7 @@ double area(const std::vector<const Coordinate*> tri)
     gp_Vec ac = (*tri[2]) - (*tri[0]);
     gp_Vec n = ab.Crossed(ac);      // cross product
     // divided by 2 is the triangle area
+    return n.Magnitude() /2.0;
 }
 
 /// Möller and Trumbore, « Fast, Minimum Storage Ray-Triangle Intersection », Journal of Graphics Tools, vol. 2,‎ 1997, p. 21–28
@@ -374,8 +376,9 @@ void calc_intersections(const Handle(Poly_Triangulation) triangles, const GridIn
 
 }
 
-void calc_thickness(const Mat<std::vector<double>>& mat, Image& im)
+std::set<std::pair<size_t, size_t>> calc_thickness(const Mat<std::vector<double>>& mat, Image& im)
 {
+    std::set<std::pair<size_t, size_t>> error_pos;
     for (size_t r=0; r< mat.rows(); r++)
     {
         for (size_t c=0; c< mat.cols(); c++)
@@ -386,8 +389,9 @@ void calc_thickness(const Mat<std::vector<double>>& mat, Image& im)
                 im(r, c) = 0.0f;
             else if (n%2 == 1)
             {
-                std::cout << "Error: intersection vector size " << n << " is not an even number " << r << ", " << c <<"\n";
-                im(r, c) = 0.0f;   // set zero, or intoperation
+                //std::cout << "Error: intersection vector size " << n << " is not an even number " << r << ", " << c <<"\n";
+                im(r, c) = 0.0f;   // set zero, or intoperation later
+                error_pos.insert({r, c});
             }
             else if(n==2)
                 im(r, c) = std::abs((*p)[0] - (*p)[1]);
@@ -404,24 +408,53 @@ void calc_thickness(const Mat<std::vector<double>>& mat, Image& im)
                 im(r, c) = std::abs(t);
             }
         }
-        
     }
+    return error_pos;
 }
 
-void check_thickness(const Mat<std::vector<double>>& mat, int iaxis)
+/// if single pixel missing, it is acceptable for interpolation
+/// if there is large area of missing pixels, interpolation has bad quality.
+void interoplate_thickness(const std::set<std::pair<size_t, size_t>> error_pos, Image& im)
 {
-    // build points and mesh to debug
-    for (size_t r=0; r< mat.rows(); r++)
+    for(const auto& it: error_pos)
     {
-        for (size_t c=0; c< mat.cols(); c++)
+        size_t r = it.first;
+        size_t c = it.second;
+        std::vector<float> values;
+        for (size_t i=1; r+i < im.rows(); i++)
         {
-            const auto& p = mat(r,c);
-            const auto n = p->size();
-            if (n%2 == 1)
+            if( error_pos.find({r+i, c}) == error_pos.end() )
             {
-
+                values.push_back(im(r+i, c));
+                break; 
             }
         }
+        for (size_t i=1; r-i >= 0; i++)
+        {
+            if( error_pos.find({r-i, c}) == error_pos.end())
+            {
+                values.push_back(im(r-i, c));
+                break; 
+            }
+        }
+        for (size_t i=1; c+i < im.cols(); i++)
+        {
+            if( error_pos.find({r, c+i}) == error_pos.end() )
+            {
+                values.push_back(im(r, c+i));
+                break; 
+            }
+        }
+        for (size_t i=1; c-i >= 0; i++)
+        {
+            if( error_pos.find({r, c-i}) == error_pos.end() )
+            {
+                values.push_back(im(r, c-i));
+                break; 
+            }
+        }
+        assert(std::size(values) <= 4);
+        im(r, c) = std::accumulate(values.cbegin(), values.cend(), 0.0) / std::size(values);
     }
 }
 
@@ -450,8 +483,23 @@ void save_data(const IntersectionData& data, const std::string& output_file_stem
     {
         const auto& mat = *data[i];
         Image im(mat.rows(), mat.cols());
-        calc_thickness(mat, im);
-        save_image(im, output_file_stem + PNAMES[i] + IM_SUFFIX);
+        auto error_pos = calc_thickness(mat, im);
+        double threshold = 0.05;
+        if (std::size(error_pos) > mat.rows() * mat.cols() * threshold)
+        {
+            std::cout << "Error: image will not be saved as total number of odd thickness vector size " << 
+                std::size(error_pos) << " is higher than the threshold percentage " <<  0.05 * 100 <<"\n";
+        }
+        else
+        {
+            if(std::size(error_pos) > 0)
+            {
+                std::cout << "Warning: total number of odd thickness vector size " << 
+                    std::size(error_pos) << ",  " <<  0.05 * 100 <<" percentage, will be interpolated\n";
+                interoplate_thickness(error_pos, im);
+            }
+            save_image(im, output_file_stem + PNAMES[i] + IM_SUFFIX);
+        }
     }
 }
 
@@ -676,8 +724,8 @@ int main(int argc, char *argv[]) {
     .required()
     .help("input geometry file path");
 
-  //program.add_argument("-o", "--output")
-  //  .help("specify the output file.");
+  program.add_argument("-o", "--output")
+    .help("specify the output file stem");
 
   program.add_argument("--grid").nargs(3)
     .help("image pixel for x, y, z as an integer array")
@@ -706,10 +754,10 @@ int main(int argc, char *argv[]) {
   
     //test_IndexedMap();
     auto input = program.get<std::string>("input");
-    std::string output_stem = input;
+    std::string output_stem = program.get<std::string>("-o");
 
 
-        // only if found ".stl", ".off"  must be converted to stl file
+    // only if found ".stl", ".off"  must be converted to stl file
     if(input.find(".stl") !=std::string::npos)
     {
         BoundBoxType bbox;

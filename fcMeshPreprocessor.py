@@ -58,7 +58,7 @@ if __name__ == "__main__":
     info = convertMesh(inputfile, output)
     bbox = info["bbox"]
     bbox_arg = " --bbox {} {} {} {} {} {}".format(bbox[0], bbox[1], bbox[2], bbox[3], bbox[4], bbox[5])
-    cmd = root_path + u'/occProjector/build/occ_projector  "{}" '.format(inputfile)  + bbox_arg
+    cmd = root_path + u'/occProjector/build/occProjector  "{}" '.format(inputfile)  + bbox_arg
     print(cmd)
     os.system(cmd)
     print(bbox)

@@ -7,7 +7,7 @@ import shutil
 import glob
 
 generatingThicknessViewImage=True # also generate meta data for CAD geometry like step file
-generatingMultiViewImage=True # also generate meta data for CAD geometry like step file
+generatingMultiViewImage=False # also generate meta data for CAD geometry like step file
 datasetName = "Thingi10K"       # all data in one folder
 #datasetName =  "ModelNet" not usable dataset !
 #datasetName = "fclib"    
@@ -24,7 +24,7 @@ if datasetName == "Thingi10K":
     input_file_suffix = "stl"
     # stl is the format needed for view generator, no need for conversion
 
-    testing = True   # for debugging purpose
+    testing = False   # for debugging purpose
     ##############################
     if testing:
         root_path = "./testdata/testThingi10K_data"
@@ -41,6 +41,7 @@ if datasetName == "Thingi10K":
         if hasPerfileMetadata:
             # no needed for input format conversion
             all_input_files = glob.glob(root_path  + os.path.sep  + "*." + metadata_suffix)
+            #print(all_input_files)
         for input_file in all_input_files:
             #print("process metadata for input file", input_file)
             f = input_file.split(os.path.sep)[-1]
