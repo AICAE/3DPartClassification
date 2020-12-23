@@ -1,9 +1,14 @@
 test*/*
 */build/*
 
+stage/*
 */*.png
 */*.csv
-*.txt
+*.log
+
+.vscode/*
+
+*_example/*
 
 *.pdf
 #*.docx

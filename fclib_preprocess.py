@@ -1,3 +1,7 @@
+"""
+For FreeCAD library parts dataset only
+"""
+
 from __future__ import print_function, division
 import os
 import os.path
@@ -11,7 +15,7 @@ import pandas as pd
 pd.options.display.float_format = '{:,.2g}'.format
 from tqdm import tqdm
 
-from fclib_parameters import *
+from input_parameters import *
 from imagePreprocess import collectImages
 
 def process():
@@ -27,7 +31,7 @@ def process():
 
     imagelist = []
 
-
+    image_suffices = ["_0.png", "_1.png", "_2.png"]
     count = 0
     step_count =100
     step_i = 0
@@ -53,7 +57,7 @@ def process():
             metadata["category"] = entry["category"]
             metadata["subcategories"] = entry["subcategories"]
 
-            imagelist.append(collectImages(image_stem))  # it is quick enough
+            imagelist.append(collectImages(image_stem, image_suffices))  # it is quick enough
             try:
                 dataset.append(metadata)  # image collection may fail
             except Exception as e:

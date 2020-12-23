@@ -15,7 +15,8 @@ import copy
 import cppyy
 import cppyy.ll
 
-good = cppyy.cppdef(open("compressBlock.cpp").read())
+cwd = os.path.dirname(os.path.abspath(__file__))
+good = cppyy.cppdef(open(cwd + os.path.sep + "compressBlock.cpp").read())
 if not good:
     print("cppyy failed to compile the cpp code")
 

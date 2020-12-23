@@ -7,8 +7,9 @@ import subprocess
 from collections import OrderedDict
 
 
-using_threading = False  # false, can help debugging
-resumable= False  # carry on work left, Registry can not resume for the time being
+using_threading = True  # false, can help debugging
+resumable= True  # carry on work left, Registry can not resume for the time being
+existing_dataset = {}
 
 from input_parameters import *
 
@@ -27,25 +28,29 @@ nb_processed =0
 def get_filename_stem(input_filename):
     return input_filename[:input_filename.rfind(".")] 
 
-def generate_view_images(input_filename, working_dir=None, info=None):
+def generate_view_images(input_filename, is_thickness=True, working_dir=None, info=None):
     # input_filename should be an absolute path in the output folder
     # for mesh type input file, need extra info
     input_filename = os.path.abspath(input_filename)
     input_file_stem = get_filename_stem(input_filename).split(os.path.sep)[-1]
     output_filepath_stem = working_dir + os.path.sep + input_file_stem
+    #print(output_filepath_stem)
 
     if not working_dir:
         working_dir = os.path.dirname(input_filename)
     assert(os.path.exists(working_dir))
+    
     #print(input_filename, working_dir)
-    if isMeshFile:
-        assert info
-        args = ["--bbox"] + [ str(v) for v in info["bbox"]]
-        cmd = [ThicknessViewApp, input_filename] + args
-        # , get_filename_stem(input_filename)
-        print(cmd)
-    else:
-        cmd = [ThicknessViewApp, input_filename, get_filename_stem(input_filename)]
+    if is_thickness==True:
+        if isMeshFile:
+            assert info
+            args = ["--bbox"] + [ str(v) for v in info["bbox"]]
+            cmd = [ThicknessViewApp, input_filename, "-o", output_filepath_stem] + args
+            print(" ".join(cmd))
+        else:
+            cmd = [ThicknessViewApp, input_filename, "-o", output_filepath_stem]
+    else:   # multi view 
+        cmd = [MultiViewApp, input_filename]
 
     p = subprocess.Popen(cmd, cwd=working_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, error = p.communicate()
@@ -121,7 +126,11 @@ def process_error(filename):
 
 
 def _process_input_file(input_file_path, output_file_path):
-    json_file_path = output_file_path[:output_file_path.rfind(".")]  + "_metadata.json"
+    output_stem = output_file_path[:output_file_path.rfind(".")]
+    json_file_path = output_stem  + "_metadata.json"
+    if resumable and os.path.exists(json_file_path):
+        return True
+
     info = generate_metadata(input_file_path, json_file_path)
     input_metadata_file_path = input_file_path.replace(input_file_suffix, metadata_suffix)
     #hasPerfileMetadata = os.path.exists(input_metadata_file_path)
@@ -134,10 +143,15 @@ def _process_input_file(input_file_path, output_file_path):
     else:
         input_file = input_file_path
 
+    cwd = os.path.abspath(os.path.dirname(output_file_path))
     if generatingMultiViewImage:
-        pass
+        generate_view_images(input_file, False, cwd)
+        if len(glob.glob(output_stem + "*.png")) != 3:  # todo:  nview, 
+            return False
     if generatingThicknessViewImage:
-        generate_view_images(input_file, os.path.dirname(output_file_path), info)
+        generate_view_images(input_file, True, cwd, info)
+        if len(glob.glob(output_stem + "*.csv")) != 3:
+            return False
     return True
 
 def process_input_file(input_file_path, output_file_path=None):
@@ -146,12 +160,12 @@ def process_input_file(input_file_path, output_file_path=None):
         output_file_path = generate_output_file_path(input_file_path)
     if using_threading:
         try:
-            _process_input_file(input_file_path, output_file_path)
+            return _process_input_file(input_file_path, output_file_path)
         except:
             print("Error in converting or viewing part:", output_file_path)
             return False
     else:
-        _process_input_file(input_file_path, output_file_path)
+        return _process_input_file(input_file_path, output_file_path)
 
 def process_folder(input_folder, output_folder, level=0):
     #
@@ -231,6 +245,9 @@ def write_dataset_metadata(dataset_filename):
 
 ##################################
 if __name__ == "__main__":
+    if os.path.exists(dataset_filename) and resumable:
+        with open(dataset_filename, 'r') as f:
+            existing_dataset = json.load(f)
     process_folder(root_path, output_root_path)
     #process_folder1(root_path)
     if using_threading:

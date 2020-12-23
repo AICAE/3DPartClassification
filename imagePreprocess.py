@@ -5,11 +5,13 @@ import os.path
 import sys
 import time
 import random
+import sys
 
 import numpy as np
 from matplotlib import pyplot as plt
 import cv2
 
+sys.path.append(os.path.dirname(__file__) + os.path.sep + "compressImage")
 from compressImage import compressImageBlock as compressImageCpp
 from compressImage import compressImage
 
@@ -26,14 +28,26 @@ elif block_size==8:
 else:
     raise Exception("block size must be 4 or 8")
 
-def collectImages(filename_stem):
-    filenames = [filename_stem + s for s in ["_0.png", "_1.png", "_2.png"]]
+def collectImages(filename_stem, suffices):
+    # collectImages(image_stem, image_suffices)
+    filenames = [filename_stem + s for s in suffices]
     images = []
 
     for f in filenames:
-        img = cv2.imread(f, 0)     # Load an color image in grayscale
-        #img = rgb2gray(img)
-        img = cv2.resize(img,(im_width, im_height))
+        if f.endswith(".png"):
+            img = cv2.imread(f, 0)     # Load an color image in grayscale
+            #img = rgb2gray(img)
+            img = cv2.resize(img,(im_width, im_height))
+        elif f.endswith(".csv"):
+            im = np.loadtxt(f, delimiter=',')
+            #normalize,  because min is zero, to
+            immax = np.max(im) # some point, value to too big, NAN, that scaling to all zeros
+            if immax > 1e5 or immax < 1e-3:
+                return None
+            img = im/immax
+        else:
+            print("Error: image input suffix not supported", f)
+
         #print("after resize: ", img.shape)
         if binarizingImage and not compressingImage:
             th = cv2.adaptiveThreshold(img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\

@@ -121,17 +121,28 @@ image_suffix = ".png"
 view_count = 3
 # before random padding the image position
 
-############## tensorflow input ############
-# image preprocessing
-binarizingImage = True
-paddingImage = True
-im_width, im_height = 120, 120   # before padding
-#final image size to be learned by AI
-IM_WIDTH, IM_HEIGHT = 128, 128
+############## image preprocessing ############
+if datasetName == "Thingi10K":
 
-## compression  only for some CAD part
-compressingImage = True  #  compressed or not compressed, both working
-block_size = 8  # can be 4,  4X4 binary pixels compressed into uint16
+    binarizingImage = False
+    paddingImage = True
+    im_width, im_height = 60, 60   # before padding
+    #final image size to be learned by AI
+    IM_WIDTH, IM_HEIGHT = 64, 64
+
+    compressingImage = False #  
+else:
+    # image preprocessing
+    binarizingImage = True
+    paddingImage = True
+    im_width, im_height = 120, 120   # before padding
+    #final image size to be learned by AI
+    IM_WIDTH, IM_HEIGHT = 128, 128
+
+    ## compression  only for some CAD part
+    compressingImage = True  #  compressed or not compressed, both working
+    block_size = 8  # can be 4,  4X4 binary pixels compressed into uint16
+
 
 if compressingImage:
     result_shape = (IM_WIDTH//block_size, IM_HEIGHT//block_size, view_count)
@@ -153,7 +164,7 @@ if not os.path.exists(output_root_path):
     os.makedirs(output_root_path)
 dataset_filename = output_root_path + os.path.sep + dataset_filename
 # it is better to output to another folder but keep folder structure, for easy clean up
-    
+
 processed_metadata_filename = output_root_path + os.path.sep + "processsed_metadata.json"
 if compressingImage:
     processed_imagedata_filename = output_root_path + os.path.sep + "compressed_imagedata.npy"
