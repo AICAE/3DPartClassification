@@ -47,3 +47,10 @@ ADD_EXECUTABLE(occProjector occProjector.cpp)
 TARGET_LINK_LIBRARIES(occProjector  ${OCC_LINK_LIBS})
 #TARGET_LINK_LIBRARIES(occProjector ${CGAL_LIBRARY})
 target_link_libraries(occProjector Eigen3::Eigen)
+
+
+########################################################
+ADD_EXECUTABLE(occ_inscribe occ_inscribe.cpp)
+target_compile_definitions(occ_inscribe PUBLIC "-DBUILD_INSCRIBE")
+TARGET_LINK_LIBRARIES(occ_inscribe  ${OCC_LINK_LIBS})
+target_link_libraries(occ_inscribe Eigen3::Eigen)
