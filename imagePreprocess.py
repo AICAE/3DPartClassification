@@ -1,3 +1,5 @@
+## for any dataset with image data
+
 from __future__ import print_function, division
 import subprocess
 import os
@@ -11,22 +13,20 @@ import numpy as np
 from matplotlib import pyplot as plt
 import cv2
 
-sys.path.append(os.path.dirname(__file__) + os.path.sep + "compressImage")
-from compressImage import compressImageBlock as compressImageCpp
-from compressImage import compressImage
+from input_parameters import *
 
-from fclib_parameters import *
-#IM_WIDTH, IM_HEIGHT = 128, 128
-#block_size = 8
-
-if block_size==4:
-    block_dtype = np.uint16
-    middle = 2**16/2.0
-elif block_size==8:
-    block_dtype = np.uint64
-    middle = 2**63*1.0
-else:
-    raise Exception("block size must be 4 or 8")
+if datasetName == "fclib":
+    sys.path.append(os.path.dirname(__file__) + os.path.sep + "compressImage")
+    from compressImage import compressImageBlock as compressImageCpp
+    from compressImage import compressImage
+    if block_size==4:
+        block_dtype = np.uint16
+        middle = 2**16/2.0
+    elif block_size==8:
+        block_dtype = np.uint64
+        middle = 2**63*1.0
+    else:
+        raise Exception("block size must be 4 or 8")
 
 def collectImages(filename_stem, suffices):
     # collectImages(image_stem, image_suffices)
