@@ -29,7 +29,7 @@ image_height = 480
 if testing:
     root_path = "./testdata/testdata_fclib"
     output_root_path = "./testdata/testdata_fclib_output"
-    dataset_filename =  "./testdata/testdata_fclib_output/test_data.json"
+    dataset_metadata_filename =  "./testdata/testdata_fclib_output/test_data.json"
 else:
     output_root_path = "/opt/freecad_library_output"
     if not os.path.exists(output_root_path):
@@ -37,10 +37,10 @@ else:
 
     if MechanicalOnly:
         root_path = "/opt/FreeCAD-library/Mechanical Parts"
-        dataset_filename = "mechdata.json"
+        dataset_metadata_filename = "mechdata.json"
     else:
         root_path = "/opt/FreeCAD-library"
-        dataset_filename = "alldata.json"
+        dataset_metadata_filename = "alldata.json"
 
 
 ####################  should be shared ##############################

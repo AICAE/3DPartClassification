@@ -29,11 +29,11 @@ if datasetName == "Thingi10K":
     if testing:
         root_path = "./testdata/testThingi10K_data"
         output_root_path = "./testdata/testThingi10K_output"
-        dataset_filename =  "testThingi10K_dataset.json"
+        dataset_metadata_filename =  "testThingi10K_dataset.json"
     else:
         root_path = "/mnt/windata/MyData/Thingi10K_dataset"
         output_root_path = "/mnt/windata/MyData/Thingi10K_dataset_output"
-        dataset_filename = "Thingi10K_dataset.json"
+        dataset_metadata_filename = "Thingi10K_dataset.json"
 
     def collect_metadata():
         # only works if all input files are in the same folder
@@ -71,17 +71,17 @@ elif datasetName == "ModelNet":
     if testing:
         root_path = "./testdata/testmesh_data"
         output_root_path = "./testdata/testmesh_output"
-        dataset_filename =  output_root_path + os.path.sep + "testmesh_data.json"
+        dataset_metadata_filename =  output_root_path + os.path.sep + "testmesh_data.json"
     else:
         output_root_path = "/opt/ModelNet10_output"
         root_path = "/mnt/windata/MyData/ModelNet10"
-        dataset_filename = "ModelNet10_data.json"
+        dataset_metadata_filename = "ModelNet10_data.json"
 
 else:
     from fclib_parameters import *
 
 ##########################
-# preprocessing  meshlib meshed part dataset_filename
+# preprocessing  meshlib meshed part dataset_metadata_filename
 ##########################
 if isMeshFile:
     # freecad output stl can not been read by occt, but we need freecad to calc bbox ,etc 
@@ -162,10 +162,10 @@ if testing:
         os.system("rm -rf {}".format(output_root_path))  # this is not portable, posix only
 if not os.path.exists(output_root_path):
     os.makedirs(output_root_path)
-dataset_filename = output_root_path + os.path.sep + dataset_filename
 # it is better to output to another folder but keep folder structure, for easy clean up
+dataset_metadata_filepath = output_root_path + os.path.sep + dataset_metadata_filename
 
-processed_metadata_filename = output_root_path + os.path.sep + "processsed_metadata.json"
+processed_metadata_filepath = output_root_path + os.path.sep + "processed_" + dataset_metadata_filename
 if compressingImage:
     processed_imagedata_filename = output_root_path + os.path.sep + "compressed_imagedata.npy"
 else:

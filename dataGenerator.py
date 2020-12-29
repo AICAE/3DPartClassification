@@ -233,20 +233,20 @@ def process_folder_serial(folder_path):
             process_folder_serial(fullname)
 """
 
-def write_dataset_metadata(dataset_filename):
+def write_dataset_metadata(dataset_metadata_filename):
     if hasPerfileMetadata:
         dataset_metadata = collect_metadata()
     else:
         dataset_metadata = list(PART_REGISTRY.values())  # list is not as good as dict
-    with open(dataset_filename, 'w') as f:
+    with open(dataset_metadata_filename, 'w') as f:
         json.dump(dataset_metadata, f, indent=4)
-        print("data has been write into file: ", dataset_filename)
+        print("data has been write into file: ", dataset_metadata_filename)
 
 
 ##################################
 if __name__ == "__main__":
-    if os.path.exists(dataset_filename) and resumable:
-        with open(dataset_filename, 'r') as f:
+    if os.path.exists(dataset_metadata_filename) and resumable:
+        with open(dataset_metadata_filename, 'r') as f:
             existing_dataset = json.load(f)
     process_folder(root_path, output_root_path)
     #process_folder1(root_path)
@@ -255,6 +255,6 @@ if __name__ == "__main__":
         for file, fu in all_futures.items():
             if not fu.result():
                 process_error(file)
-    write_dataset_metadata(dataset_filename)
+    write_dataset_metadata(dataset_metadata_filename)
     print("total registered files = ", len(PART_REGISTRY))
     print("total processed files = ", nb_processed)

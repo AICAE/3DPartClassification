@@ -34,10 +34,10 @@ import os.path
 import json
 import numpy as np
 import pandas as pd
-from dataCollector import MechanicalOnly, dataset_filename, root_path
+from dataCollector import MechanicalOnly, dataset_metadata_filename, root_path
 
-#dataset_filename = "inputData.json"
-datafile = open(dataset_filename, "r")
+#dataset_metadata_filename = "inputData.json"
+datafile = open(dataset_metadata_filename, "r")
 dataList = json.loads(datafile.read())
 data = pd.DataFrame(dataList)
 print(data.head(10))
