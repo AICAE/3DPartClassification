@@ -21,6 +21,16 @@ from imagePreprocess import collectImages
 dataset = []
 imagelist = []
 
+def process_image(image_stem, image_suffices):
+    try:
+        ims = collectImages(image_stem, image_suffices)  # it is quick enough
+        if isinstance(ims, (np.ndarray, np.generic)):
+            imagelist.append(imagelist, ims)
+            dataset.append(metadata)  # image collection may fail
+    except Exception as e:
+        print(e)
+        print("error in processing image", image_stem)
+
 if datasetName == "Thingi10K":
     CATEGORY_LABEL="Category"
     FILENAME_LABEL="File ID"
@@ -36,17 +46,9 @@ if datasetName == "Thingi10K":
         input_file_stem = fileid           
 
         image_stem = filefolder + os.path.sep + input_file_stem
-        #images = glob.glob(image_stem +"*"+image_suffix)
-
+        # check: return NoneType /mnt/windata/MyData/Thingi10K_dataset_output/196196
         if all([os.path.exists(image_stem + s) for s in image_suffices]):
-            try:
-                ims = collectImages(image_stem, image_suffices)
-                imagelist.append(ims)
-                dataset.append(entry)
-                print("processed image files for ", image_stem)
-            except Exception as e:
-                print(e)
-                print("error in processing image", image_stem)
+            process_image(image_stem, image_suffices)
         else:
             #print("Can not find image files for ", image_stem)
             pass
@@ -77,12 +79,7 @@ else:  # FreeCADLib
             metadata["category"] = entry["category"]
             metadata["subcategories"] = entry["subcategories"]
 
-            try:
-                imagelist.append(collectImages(image_stem, image_suffices))  # it is quick enough
-                dataset.append(metadata)  # image collection may fail
-            except Exception as e:
-                print(e)
-                print("error in processing image", input_file_stem)
+            process_image(image_stem, image_suffices)
         else:
             # about 10 can not find meta data files,  image dump may have error
             print("Can not find metadata or image files ", input_file_stem)
@@ -121,6 +118,5 @@ if __name__ == "__main__":
         print(dataframe[:5])  # debug print
         dataframe.to_json(processed_metadata_filepath)
     #save images to binary format, for quicker loading
-    #s = pd.Series(["a", "b", "c", "a"], dtype="category")
-    np.save(processed_imagedata_filename, np.array(imagelist))
+    np.save(processed_imagedata_filename, np.stack(imagelist))
 

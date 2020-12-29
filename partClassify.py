@@ -48,8 +48,9 @@ import pandas as pd
 import argparse
 import locale
 import os
+import json
 
-from fclib_parameters import *
+from input_parameters import *
 from stratify import my_split
 
 #import datasets
@@ -66,28 +67,50 @@ from tf_model import create_mlp, create_cnn
 # construct the path to the input .txt file that contains information
 # on each house in the dataset and then load the dataset
 print("[INFO] loading classification data")
+df = pd.read_json(processed_metadata_filepath)
 
-df = pd.read_json(processed_metadata_filename)
-categories = pd.Series(df["category"], dtype="category")
+images = np.load(processed_imagedata_filename)  # pickle array of object type: allow_pickle=True
+print("loaded images ndarray shape", images.shape)
+print("loaded images ndarray shape", images[0].shape)
+# there is no need for reshape, np.stack(imagelist)
+#images = images.reshape((images.shape[0], images.shape[1], images.shape[2], 1))
 
-# load the house images and then scale the pixel intensities to the range [0, 1]
-images = np.load(processed_imagedata_filename)  # 
-print("loaded images ndarray shape",images.shape)
-images = images.reshape((images.shape[0], images.shape[1], images.shape[2], 1))
+if datasetName == "Thingi10K":
+    CATEGORY_LABEL="Category"  
+    SUBCATEGORY_LABEL="Subcategory"  # "Subcategory": "rc-vehicles",
+    BBOX_LABEL="bbox"
+    categories = pd.Series(df["Category"], dtype="category")
+
+    FEATURES_INT = []
+
+else:  # FreeCADLib
+    CATEGORY_LABEL="category"
+    BBOX_LABEL="obb"
+    categories = pd.Series(df["category"], dtype="category")
+    FEATURES_INT = ["solidCount", "faceCount"]
 
 ####################################
-# generate a few new columns based on "obb", a few ratios
+# generate a few new columns based on oriented boundbox, a few ratios
 #print(df.head())
-obb = np.stack(df["obb"].to_numpy())
-#print(obb.shape, obb.dtype, obb[1])
+bbox = np.stack(df[BBOX_LABEL].to_numpy())
 
-df["bbox_max_length"] = np.max(obb, axis=1)
+obb = np.zeros((bbox.shape[0], 3))
+obb[:, 0] = bbox[:, 3] - bbox[:, 0]
+obb[:, 1] = bbox[:, 4] - bbox[:, 1]
+obb[:, 2] = bbox[:, 5] - bbox[:, 2]
+
+assert((obb > 0).all())
+print(obb.shape, obb.dtype, obb[1])
+
+## TODO: double check
+print(obb[0])
+obb.sort(axis=1)  # return None, inplace sort,  ascending order
+print(obb[0])
+df["bbox_max_length"] = obb[:,2]
 bbox_volume = np.prod(obb)
 df["volume_bbox_ratio"] = df["volume"]/bbox_volume
 #print(df["bbox_max_length"])
 
-## TODO: double check
-obb.sort(axis=1)  # return None, inplace sort,  ascending order
 df["obb_ratio_1"]  = obb[:,0] / df["bbox_max_length"] 
 df["obb_ratio_2"]  = obb[:,1] / df["bbox_max_length"] 
 
@@ -98,7 +121,7 @@ imageShape = images.shape
 
 # scaled to value between 0~1.0
 FEATURES_SCALED = ["volume_bbox_ratio", "obb_ratio_1", "obb_ratio_2"]
-FEATURES_INT = ["solidCount", "faceCount"]
+
 
 FLOAT_SCALED = ["area_linear", "volume_linear"]
 # linear comparable
@@ -125,14 +148,14 @@ LABEL = "category_classified"
 using_feature_column = False
 if using_feature_column:
     classes = feature_column.categorical_column_with_vocabulary_list(
-          'category', df["category"].unique())
+          CATEGORY_LABEL, df[CATEGORY_LABEL].unique())
 
     df[LABEL] = feature_column.indicator_column(classes)
     demo(df[LABEL])
 else:
     # inverse_transform() to get string back
     catEncoder = LabelEncoder()
-    cat = catEncoder.fit_transform(df["category"])
+    cat = catEncoder.fit_transform(df[CATEGORY_LABEL])
     print("label category encoded as integer: ", type(cat), cat.shape, cat.dtype)  #ndarray of integer
     df[LABEL] = cat
 

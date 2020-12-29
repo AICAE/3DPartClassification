@@ -65,13 +65,14 @@ def collectImages(filename_stem, suffices):
     if concatingImage:
         return concatImages(images, filename)
     else:
-        return images
+        return np.stack(images)
 
 def concatImages(images, filename):
 
     # full filename  = root + filename suffix `_X.png`
     #concat images
-    im = cv2.hconcat(images)
+    #im = cv2.hconcat(images)
+    im = np.concatenate(images, axis=1)
     # debug show image
     #showImage(im, title=filename)
     return im
