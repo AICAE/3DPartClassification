@@ -17,7 +17,6 @@ void save_image(const Image& im, const std::string& filename)
 }
 
 
-
 std::set<std::pair<size_t, size_t>> calc_thickness(const IntersectionMat& mat, Image& im)
 {
     std::set<std::pair<size_t, size_t>> error_pos;
@@ -31,7 +30,7 @@ std::set<std::pair<size_t, size_t>> calc_thickness(const IntersectionMat& mat, I
                 im(r, c) = 0.0f;
             else if (n%2 == 1)
             {
-                //std::cout << "Error: intersection vector size " << n << " is not an even number " << r << ", " << c <<"\n";
+                std::cout << "Error: intersection vector size " << n << " is not an even number " << r << ", " << c <<"\n";
                 im(r, c) = 0.0f;   // set zero, or intoperation later
                 error_pos.insert({r, c});
             }
@@ -130,8 +129,8 @@ void save_data(const IntersectionData& data, const std::string& output_file_stem
         {
             if(std::size(error_pos) > 0)
             {
-                std::cout << "Warning: total number of odd thickness vector size " << 
-                    std::size(error_pos) << ",  " <<  0.05 * 100 <<" percentage, will be interpolated\n";
+                std::cout << "Warning: total number of odd thickness vector size " << std::size(error_pos) << 
+                    ",  less than threshold" <<  0.05 * 100 << " percentage, will be interpolated\n";
                 interoplate_thickness(error_pos, im);
             }
             save_image(im, output_file_stem + PNAMES[i] + IM_SUFFIX);
@@ -165,9 +164,12 @@ double intersect_bop(const TopoDS_Shape& shape, const TopoDS_Edge& edge)
     return t;
 }
 
+/// this BOP method is very slow but precise
+///  and it uses a grid different from triangulation method
 int bop(std::string input, const std::string& output_file_stem)
 {
-    auto shape = prepare_shape(input);
+    Bnd_OBB obb;
+    auto shape = prepare_shape(input, obb);
     Bnd_Box box;
     BRepBndLib::Add(shape, box);
 
@@ -224,17 +226,18 @@ int bop(std::string input, const std::string& output_file_stem)
 /// triangulation, fast less precise than BOP
 int project(std::string input, const std::string& output_file_stem)
 {
-
-    auto shape = prepare_shape(input);
+    Bnd_OBB obb;
+    auto shape = prepare_shape(input, obb);
     MeshData mesh;
     mesh.grid_info = generate_grid(shape);
 
     IntersectionData data;
     init_intersection_data(data);
     auto faces = get_free_faces(shape);
+    double linDefl = 0.25; // or 0.1 times of pixel grid space?
     for(const auto& f: *faces)
     {
-        mesh.triangles = generate_mesh(f, mesh.local_transform);
+        mesh.triangles = generate_mesh(f, mesh.local_transform, linDefl);
         calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
     }
     // save thickness matrix as numpy array,  scale it?  save as image?
@@ -311,8 +314,11 @@ int main(int argc, char *argv[]) {
   
     //test_IndexedMap();
     auto input = program.get<std::string>("input");
-    std::string output_stem = program.get<std::string>("-o");
-
+    std::string output_stem = input;
+    if(program.present("-o"))
+    {
+        output_stem = program.get<std::string>("-o");
+    }
 
     // only if found ".stl", ".off"  must be converted to stl file
     if(input.find(".stl") !=std::string::npos)

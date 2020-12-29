@@ -71,7 +71,8 @@ const unsigned int NVIEWS = 3;
 #else
 const unsigned int NVIEWS = 3;
 #endif
-std::array<size_t, 3> NGRIDS = {64, 64, 64};  // make it diff to test image size
+const int DIM=3;  
+std::array<size_t, DIM> NGRIDS = {64, 64, 64};  // make it diff to test image size
 
 template <typename T> 
 using Mat = Eigen::Matrix<std::shared_ptr<T>, Eigen::Dynamic, Eigen::Dynamic> ;
@@ -92,7 +93,7 @@ void init_matrix(Mat<T>& mat)
     }
 }
 
-const int DIM=3;  
+
 
 /// linear grid (equally-spaced in one axis), 3D grid, voxel
 struct GridInfo
@@ -110,12 +111,13 @@ struct MeshData
     gp_Trsf local_transform;
 };
 
+
 GridInfo generate_grid(const BoundBoxType bbox)
 {
     double xmin, ymin, zmin, xmax, ymax, zmax;
     xmin = bbox[0], ymin = bbox[1], zmin = bbox[2];
     xmax = bbox[3], ymax = bbox[4], zmax = bbox[5];
-    int sh = 3;
+    int sh = 1;  // shift
     std::array<double, DIM> spaces = {(xmax-xmin)/(NGRIDS[0]-sh), 
             (ymax-ymin)/(NGRIDS[1]-sh), (zmax-zmin)/(NGRIDS[2]-sh)};
     std::array<double, DIM> starts = {xmin - spaces[0] * 0.5 * sh, 
@@ -126,7 +128,7 @@ GridInfo generate_grid(const BoundBoxType bbox)
     return gInfo;
 }
 
-/// stp, brep files
+/// currently brep only, assuming single solid
 TopoDS_Shape read_geometry(std::string filename)
 {
     // 2. image resolution, setup grid
@@ -139,22 +141,22 @@ TopoDS_Shape read_geometry(std::string filename)
 
 /// for STEP, BREP shape input files, first of all, imprint and merge
 /// rotate shape with OBB to AABB, can also translate
-TopoDS_Shape  prepare_shape(std::string input)
+TopoDS_Shape  prepare_shape(std::string input, Bnd_OBB& obb)
 {
     // 1. rotate view according to boundbox
     TopoDS_Shape shape = read_geometry(input);
 
-    Bnd_OBB obb;   // YHSize  H means half length
     BRepBndLib::AddOBB(shape, obb);
     if(!obb.IsAABox())
     {
         gp_Ax3 obb_ax(obb.Center(), obb.ZDirection(), obb.XDirection());
+        // occt 7.3 does not have Position() to return gp_Ax3, so create this ax3
         gp_Trsf trsf;
-        gp_Ax3 orig;
-        orig.SetLocation(obb.Center());
-        trsf.SetTransformation(obb_ax, gp_Ax3());                            
+        //gp_Ax3 gc_ax3; // the reference coordinate system (OXYZ)
+        //gc_ax3.SetLocation(obb.Center());
+        trsf.SetTransformation(obb_ax, gp::XOY());                            
         auto t = BRepBuilderAPI_Transform(shape, trsf, true);
-        //shape = t.Shape();
+        //shape = t.Shape();  // it works
     }
     return shape;
 }
@@ -177,14 +179,15 @@ std::shared_ptr<std::vector<TopoDS_Face>> get_free_faces(const TopoDS_Shape &sha
     return externalFaces;
 }
 
-const Handle(Poly_Triangulation)  generate_mesh(TopoDS_Face f, gp_Trsf& local_transform )
+/// gp_Trsf& local_transform is an output parameter
+const Handle(Poly_Triangulation)  generate_mesh(TopoDS_Face f, gp_Trsf& local_transform, double linDefl= 0.25)
 {
-    double tolerance = 0.25;  // 5 times of pixel grid space?
+    const double theAngDeflection = 5; //default 0.5
     // mesh each face, by given best tols
-    BRepMesh_IncrementalMesh facets(f, tolerance, true, 5);
+    BRepMesh_IncrementalMesh facets(f, linDefl, true, theAngDeflection);
 
     TopLoc_Location local_loc;
-    // BRep_Tool::Triangulation is for face only
+    // BRep_Tool::Triangulation is for face only, return null if no mesh
     const Handle(Poly_Triangulation) triangles  = BRep_Tool::Triangulation(f, local_loc);
     // also get local transform
     local_transform = local_loc;
