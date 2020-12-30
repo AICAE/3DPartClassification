@@ -73,6 +73,7 @@ const unsigned int NVIEWS = 3;
 #endif
 const int DIM=3;  
 std::array<size_t, DIM> NGRIDS = {64, 64, 64};  // make it diff to test image size
+const bool USE_OBB = false;
 
 template <typename T> 
 using Mat = Eigen::Matrix<std::shared_ptr<T>, Eigen::Dynamic, Eigen::Dynamic> ;
@@ -112,22 +113,6 @@ struct MeshData
 };
 
 
-GridInfo generate_grid(const BoundBoxType bbox)
-{
-    double xmin, ymin, zmin, xmax, ymax, zmax;
-    xmin = bbox[0], ymin = bbox[1], zmin = bbox[2];
-    xmax = bbox[3], ymax = bbox[4], zmax = bbox[5];
-    int sh = 1;  // shift
-    std::array<double, DIM> spaces = {(xmax-xmin)/(NGRIDS[0]-sh), 
-            (ymax-ymin)/(NGRIDS[1]-sh), (zmax-zmin)/(NGRIDS[2]-sh)};
-    std::array<double, DIM> starts = {xmin - spaces[0] * 0.5 * sh, 
-            ymin - spaces[1] * 0.5 * sh, zmin - spaces[2] * 0.5 * sh};  // first cell's center
-      
-    GridInfo gInfo{starts, spaces, NGRIDS};
-
-    return gInfo;
-}
-
 /// currently brep only, assuming single solid
 TopoDS_Shape read_geometry(std::string filename)
 {
@@ -147,7 +132,7 @@ TopoDS_Shape  prepare_shape(std::string input, Bnd_OBB& obb)
     TopoDS_Shape shape = read_geometry(input);
 
     BRepBndLib::AddOBB(shape, obb);
-    if(!obb.IsAABox())
+    if(!obb.IsAABox()  &&  USE_OBB)
     {
         gp_Ax3 obb_ax(obb.Center(), obb.ZDirection(), obb.XDirection());
         // occt 7.3 does not have Position() to return gp_Ax3, so create this ax3
@@ -156,7 +141,8 @@ TopoDS_Shape  prepare_shape(std::string input, Bnd_OBB& obb)
         //gc_ax3.SetLocation(obb.Center());
         trsf.SetTransformation(obb_ax, gp::XOY());                            
         auto t = BRepBuilderAPI_Transform(shape, trsf, true);
-        //shape = t.Shape();  // it works
+
+        shape = t.Shape();  // it works
     }
     return shape;
 }
@@ -164,8 +150,7 @@ TopoDS_Shape  prepare_shape(std::string input, Bnd_OBB& obb)
 /// free (used once in topology), not internal (embedded inside a solid)
 std::shared_ptr<std::vector<TopoDS_Face>> get_free_faces(const TopoDS_Shape &shape) 
 {
-
-    auto externalFaces = std::make_shared<std::vector<TopoDS_Face>>();
+    auto freeFaces = std::make_shared<std::vector<TopoDS_Face>>();
 
     for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
         const TopoDS_Face &face = TopoDS::Face(ex.Current());
@@ -173,23 +158,24 @@ std::shared_ptr<std::vector<TopoDS_Face>> get_free_faces(const TopoDS_Shape &sha
 
         // Important note: For the surface map, face equivalence is defined
         // by TopoDS_Shape::IsSame(), which ignores the orientation.
-        //if (face.Orientation() == TopAbs_EXTERNAL)
-            externalFaces->push_back(face);
+        // TopoDS_Shape::IsFree()
+        //if (face.Orientation() == TopAbs_EXTERNAL)    
+            freeFaces->push_back(face);
     }
-    return externalFaces;
+    return freeFaces;
 }
 
 /// gp_Trsf& local_transform is an output parameter
 const Handle(Poly_Triangulation)  generate_mesh(TopoDS_Face f, gp_Trsf& local_transform, double linDefl= 0.25)
 {
-    const double theAngDeflection = 5; //default 0.5
+    const double theAngDeflection = 0.5; //default 0.5, degree or radian?
     // mesh each face, by given best tols
     BRepMesh_IncrementalMesh facets(f, linDefl, true, theAngDeflection);
 
     TopLoc_Location local_loc;
     // BRep_Tool::Triangulation is for face only, return null if no mesh
     const Handle(Poly_Triangulation) triangles  = BRep_Tool::Triangulation(f, local_loc);
-    // also get local transform
+    // set output parameter: local transform
     local_transform = local_loc;
     // why TopoLoc_Location  can be assigned to gp_Trsf?
 
@@ -249,8 +235,8 @@ int calc_intersection(const std::vector<const Coordinate*> tri, const std::vecto
 {
     gp_Vec    u, v, n;              // triangle vectors
     gp_Vec    w0, w;                // ray vectors
-    double     r, a, b;              // params to calc ray-plane intersect
-    const double SMALL_NUM = 1e-8;
+    scalar     r, a, b;              // params to calc ray-plane intersect
+    const scalar SMALL_NUM = 1e-8;
 
     // get triangle edge vectors and plane normal
     u = (*tri[1]) - (*tri[0]);
@@ -259,8 +245,8 @@ int calc_intersection(const std::vector<const Coordinate*> tri, const std::vecto
     if (n.Magnitude() < 10e-12)    // triangle is degenerate, zero area?
         return -1;                     // do not deal with this case
          
-    w0 = *R[0] - (*tri[0]);
-    gp_Vec dir = *R[1] - *R[0];
+    w0 = *(R[0]) - (*tri[0]);
+    gp_Vec dir = *(R[1]) - *(R[0]);
     a = -n.Dot(w0);
     b = n.Dot(dir);           // ray direction vector
     if (std::fabs(b) < SMALL_NUM) {     // ray is  parallel to triangle plane
@@ -278,7 +264,7 @@ int calc_intersection(const std::vector<const Coordinate*> tri, const std::vecto
 
     I = *R[0] + r * dir;            // intersect point of ray and plane
 
-    float    uu, uv, vv, wu, wv, D;
+    scalar  uu, uv, vv, wu, wv, D;
     uu = u.Dot(u);
     uv = u.Dot(v);
     vv = v.Dot(v);
@@ -288,7 +274,7 @@ int calc_intersection(const std::vector<const Coordinate*> tri, const std::vecto
     D = uv * uv - uu * vv;
 
     // get and test parametric coords
-    float s, t;
+    scalar s, t;
     s = (uv * wv - vv * wu) / D;
     if (s < 0.0 || s > 1.0)         // I is outside T
         return 0;
@@ -328,6 +314,21 @@ void init_intersection_data(IntersectionData& data)
 }
 
 
+GridInfo generate_grid(const BoundBoxType bbox)
+{
+    double xmin, ymin, zmin, xmax, ymax, zmax;
+    xmin = bbox[0], ymin = bbox[1], zmin = bbox[2];
+    xmax = bbox[3], ymax = bbox[4], zmax = bbox[5];
+    int sh = 1;  //  margin extention, must be integer 1, other value not tested
+    std::array<double, DIM> spaces = {(xmax-xmin)/(NGRIDS[0]-2*sh), 
+            (ymax-ymin)/(NGRIDS[1]-2*sh), (zmax-zmin)/(NGRIDS[2]-2*sh)};
+    std::array<double, DIM> starts = {xmin - spaces[0] * 0.5 * sh, 
+            ymin - spaces[1] * 0.5 * sh, zmin - spaces[2] * 0.5 * sh};  // first cell's center
+      
+    GridInfo gInfo{starts, spaces, {NGRIDS[0], NGRIDS[1], NGRIDS[1]}};
+
+    return gInfo;
+}
 
 GridInfo generate_grid(const TopoDS_Shape& shape)
 {
@@ -338,17 +339,12 @@ GridInfo generate_grid(const TopoDS_Shape& shape)
 
     double xmin, xmax, ymin, ymax, zmin, zmax;
     box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
-    /// use slightly bigger space, to make sure full edge are zero thickness (void)
-    std::array<double, DIM> spaces = {(xmax-xmin)/(NGRIDS[0]-1), (ymax-ymin)/(NGRIDS[1]-1), (zmax-zmin)/(NGRIDS[2]-1)};
-    std::array<double, DIM> starts = {xmin - spaces[0] * 0.5, ymin - spaces[1] * 0.5, zmin - spaces[2] * 0.5};  // first cell's center
-      
-    GridInfo gInfo{starts, spaces, NGRIDS};
-
-    return gInfo;
+    
+    return generate_grid({xmin, ymin, zmin, xmax, ymax, zmax});
 }
 
 
-std::vector<std::array<size_t,2>> get_index_ranges(const std::vector<const Coordinate*> polygon, const GridInfo ginfo)
+std::vector<std::array<size_t,2>> get_index_ranges(const std::vector<const Coordinate*>& polygon, const GridInfo ginfo)
 {
     std::vector<std::array<size_t,2>> ranges;
     for(int iaxis = 0; iaxis < DIM; iaxis++)
@@ -360,28 +356,30 @@ std::vector<std::array<size_t,2>> get_index_ranges(const std::vector<const Coord
         }
         auto min_i = std::distance(v.cbegin(), std::min_element(v.cbegin(), v.cend()));
         size_t imin = size_t((v[min_i] - ginfo.min[iaxis]) / ginfo.spaces[iaxis] ) - 1;
-        if(imin <0)
+        if(imin < 0)
         {
             imin = 0;
         }
         auto max_i = std::distance(v.cbegin(), std::max_element(v.cbegin(), v.cend()));
         /// should be rounded up for max, not to miss some point
         size_t imax = size_t((v[max_i] - ginfo.min[iaxis]) / ginfo.spaces[iaxis] ) + 1;
-        if (imax > ginfo.nsteps[iaxis])
+        if (imax > ginfo.nsteps[iaxis] - 1)
         {
-            std::cout << "Error:  i_upper " << imax << " > grid number " << ginfo.nsteps[iaxis] << std::endl;
-            imax = ginfo.nsteps[iaxis];
+            std::cout << "Error:  i_upper " << imax << " >= grid number " << ginfo.nsteps[iaxis] << std::endl;
+            imax = ginfo.nsteps[iaxis] -1;
         }
         ranges.push_back({imin, imax});
     }
     return ranges;
 }
 
-void insert_intersections(const std::vector<Coordinate>& points, const std::array<int, 3>& tri, const GridInfo& ginfo, IntersectionData& data)
+//const std::vector<Coordinate>& points, const std::array<int, 3>& tri
+void insert_intersections(const std::vector<const Coordinate*>& triangle, const GridInfo& ginfo, IntersectionData& data)
 {
-    const std::vector<const Coordinate*> triangle = {points.data() + tri[0],  points.data() + tri[1],  points.data() + tri[2]};
     // get box bound for the tri, project to one plane, get possible indices from the grid
-    const auto iranges = get_index_ranges(triangle, ginfo);
+    //const auto iranges = get_index_ranges(triangle, ginfo);  // bug here, but why?
+    std::vector<std::array<size_t,2>> iranges = {{0, NGRIDS[0]}, {0, NGRIDS[1]}, {0, NGRIDS[2]}};
+
     // if line and triangle intersection, then save the intersection coord's third-component
     for(int iaxis = 0; iaxis < 3; iaxis++)
     {
@@ -392,23 +390,25 @@ void insert_intersections(const std::vector<Coordinate>& points, const std::arra
         size_t third_index = (iaxis + 2)%3;
         gp_Vec dir(0, 0, 0);
         dir.SetCoord(third_index + 1, 1.0);
+        // this must be bigger than boundbox range (min, max), it is fine here
         double third_min = ginfo.min[third_index] - ginfo.spaces[third_index];
         double third_max = ginfo.min[third_index] + ginfo.spaces[third_index] * (ginfo.nsteps[third_index]+1);
 
+
         IntersectionMat& mat = *data[iaxis];
-        for(size_t r = r_start; r < r_end; r++)
+        for(size_t r = r_start; r <= r_end; r++)  // r_end must also been used, closed range
         {
-            for(size_t c = c_start; c<c_end; c++)
+            for(size_t c = c_start; c <= c_end; c++)
             {
                 double r_value = ginfo.min[r_index] + ginfo.spaces[r_index] * r;
                 double c_value = ginfo.min[c_index] + ginfo.spaces[c_index] * c;
 
-                gp_Vec pos(0, 0, 0);
+                gp_Vec pos(0, 0, 0);  // occt index starts at 1, not zero
                 pos.SetCoord(r_index+1, r_value);
                 pos.SetCoord(c_index+1, c_value);
                 pos.SetCoord(third_index + 1, third_min);
                 gp_Vec p2 = pos;
-                pos.SetCoord(third_index + 1, third_max);
+                p2.SetCoord(third_index + 1, third_max);   // evil of copy-and-paste!
                 //gp_Lin l(pos, dir);
 
                 #if 0
@@ -416,7 +416,7 @@ void insert_intersections(const std::vector<Coordinate>& points, const std::arra
                 if(ret)
                 {
                     gp_Vec I(0, 0, 0);
-                    int m = calc_intersection(triangle, l, I);
+                    int m = calc_intersection(triangle,  {&pos, &p2}, I);
                     //if (m == 1)
                     mat(r, c)->push_back(I.Coord(third_index + 1));
                 }
@@ -428,30 +428,34 @@ void insert_intersections(const std::vector<Coordinate>& points, const std::arra
                     auto  h = I.Coord(third_index + 1);
                     if (h < third_max && h > third_min)
                         mat(r, c)->push_back(h);
+                    else
+                    {
+                        std::cout << " Error: intersection point out of bound box" << std::endl;
+                    }
+                    
                 }
                 #endif
             }
         }
     }
-
 }
 
 
 void calc_intersections(const Handle(Poly_Triangulation) triangles, const GridInfo& ginfo, const gp_Trsf local_transform, IntersectionData& data) 
 {
-
+    // mixing of array index starts at 1 and index starts 0 is buggy
     const TColgp_Array1OfPnt &nodes = triangles->Nodes();
     // retrieve triangle coordinates
     std::vector<Coordinate> points;   // NCollection_Array1<>
     points.reserve(nodes.Upper());
-    if (nodes.Lower() == 1 )  // one started array and index
+    if (nodes.Lower() == 1 )  // index starts at 1
     {
-        points.push_back({INFINITY, INFINITY, INFINITY});  // if we use index 0, then all inf
+        //points.push_back({INFINITY, INFINITY, INFINITY});  // if we use index 0, then all inf
     }
     for (int i = nodes.Lower(); i <= nodes.Upper(); i++) {
         Standard_Real x, y, z;
         nodes(i).Coord(x, y, z);
-        local_transform.Transforms(x, y, z);
+        local_transform.Transforms(x, y, z);  // inplace modify
         points.push_back({x,y,z});
     }
 
@@ -463,7 +467,8 @@ void calc_intersections(const Handle(Poly_Triangulation) triangles, const GridIn
         // get the node indexes for this triangle
         const Poly_Triangle &tri = tris(i);
         tri.Get(indices[0], indices[1], indices[2]);
-        insert_intersections(points, indices, ginfo, data);
+        std::vector<const Coordinate*> triangle = {points.data() + indices[0]-1,  
+                points.data() + indices[1]-1,  points.data() + indices[2]-1};
+        insert_intersections(triangle, ginfo, data);
     }
-
 }

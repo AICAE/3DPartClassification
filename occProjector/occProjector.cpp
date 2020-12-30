@@ -177,7 +177,14 @@ int bop(std::string input, const std::string& output_file_stem)
     box.Get(min[0], min[1], min[2], max[0], max[1], max[2]);
 
     for (size_t i=0; i< DIM; i++)
-        space[i] = (max[i] - min[i])/NGRIDS[i];
+    {
+        #if 1  // to give margin
+        space[i] = (max[i] - min[i])/(NGRIDS[i]-2);
+        min[i] -= space[i];
+        #else
+        space[i] = (max[i] - min[i])/(NGRIDS[i]);
+        #endif
+    }
 
     for(int iaxis = 0; iaxis < 3; iaxis++)
     {
@@ -264,7 +271,7 @@ int project_mesh(std::string input, const std::string& output_file_stem, const B
 
     MeshData mesh;
     mesh.grid_info = generate_grid(bbox);
-    mesh.local_transform = gp_Trsf();  // not necessary
+    mesh.local_transform = gp_Trsf();  // not necessary ? 
     mesh.triangles = read_mesh(input);
     calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
 
