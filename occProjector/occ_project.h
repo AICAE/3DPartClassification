@@ -78,6 +78,7 @@ const bool USE_OBB = false;
 template <typename T> 
 using Mat = Eigen::Matrix<std::shared_ptr<T>, Eigen::Dynamic, Eigen::Dynamic> ;
 
+/// shared_pointer to empty vector instead of nullptr
 typedef Mat<std::vector<scalar>> IntersectionMat;
 typedef std::array<std::shared_ptr<IntersectionMat>, NVIEWS> IntersectionData;
 typedef std::vector<scalar> BoundBoxType;
