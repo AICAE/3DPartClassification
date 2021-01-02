@@ -31,15 +31,15 @@ if testing:
     output_root_path = "./testdata/testdata_fclib_output"
     dataset_metadata_filename =  "./testdata/testdata_fclib_output/test_data.json"
 else:
-    output_root_path = "/opt/freecad_library_output"
+    output_root_path = "/mnt/windata/MyData/freecad_library_output"
     if not os.path.exists(output_root_path):
         os.makedirs(output_root_path)
 
     if MechanicalOnly:
-        root_path = "/opt/FreeCAD-library/Mechanical Parts"
+        root_path = "/mnt/windata/MyData/FreeCAD-library/Mechanical Parts"
         dataset_metadata_filename = "mechdata.json"
     else:
-        root_path = "/opt/FreeCAD-library"
+        root_path = "/mnt/windata/MyData/FreeCAD-library"
         dataset_metadata_filename = "alldata.json"
 
 

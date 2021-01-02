@@ -8,9 +8,9 @@ import glob
 
 generatingThicknessViewImage=True # also generate meta data for CAD geometry like step file
 generatingMultiViewImage=False # also generate meta data for CAD geometry like step file
-datasetName = "Thingi10K"       # all data in one folder
+#datasetName = "Thingi10K"       # all data in one folder
 #datasetName =  "ModelNet" not usable dataset !
-#datasetName = "fclib"    
+datasetName = "fclib"    
 
 metadata_suffix = "json"
 hasPerfileMetadata  = False  #  detected by replace input file suffix to json and test existence
@@ -79,6 +79,7 @@ elif datasetName == "ModelNet":
 
 else:
     from fclib_parameters import *
+    isMeshFile = False
 
 ##########################
 # preprocessing  meshlib meshed part dataset_metadata_filename
@@ -140,7 +141,7 @@ else:
     IM_WIDTH, IM_HEIGHT = 128, 128
 
     ## compression  only for some CAD part
-    compressingImage = True  #  compressed or not compressed, both working
+    compressingImage = False #  compressed or not compressed, both working
     block_size = 8  # can be 4,  4X4 binary pixels compressed into uint16
 
 
@@ -164,6 +165,7 @@ if not os.path.exists(output_root_path):
     os.makedirs(output_root_path)
 # it is better to output to another folder but keep folder structure, for easy clean up
 dataset_metadata_filepath = output_root_path + os.path.sep + dataset_metadata_filename
+
 
 processed_metadata_filepath = output_root_path + os.path.sep + "processed_" + dataset_metadata_filename
 if compressingImage:

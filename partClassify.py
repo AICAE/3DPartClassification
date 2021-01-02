@@ -1,24 +1,4 @@
 """
-https://www.pyimagesearch.com/2019/02/04/keras-multiple-inputs-and-mixed-data/
-#
-https://analyticsindiamag.com/multi-label-image-classification-with-tensorflow-keras/
-
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-
-train_dataGen = ImageDataGenerator(rescale = 1./255,
-                                  shear_range = 0.2,
-                                  zoom_range = 0.2,
-                                  horizontal_flip = True)
-
-train_generator = train_dataGen.flow_from_dataframe(
-                                        dataframe = training_set,
-                                        directory="",x_col="Images",
-                                        y_col="New_class",
-                                        class_mode="categorical",
-                                        target_size=(128,128),
-                                        batch_size=32)
-
-
 
 """
 
@@ -31,6 +11,12 @@ import tensorflow
 import tensorflow as tf
 #tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)  # WARN =30
 
+tf.debugging.experimental.enable_dump_debug_info(
+    "/tmp/tfdbg2_logdir",
+    tensor_debug_mode="FULL_HEALTH",
+    circular_buffer_size=-1)
+# after running the model: run `tensorboard --logdir /tmp/tfdbg2_logdir`
+# NO_TENSOR, CURT_HEALTH, CONCISE_HEALTH, FULL_HEALTH
 
 
 from tensorflow.keras.layers import Dense
@@ -95,9 +81,12 @@ else:  # FreeCADLib
 bbox = np.stack(df[BBOX_LABEL].to_numpy())
 
 obb = np.zeros((bbox.shape[0], 3))
-obb[:, 0] = bbox[:, 3] - bbox[:, 0]
-obb[:, 1] = bbox[:, 4] - bbox[:, 1]
-obb[:, 2] = bbox[:, 5] - bbox[:, 2]
+if obb.shape[1] == 6:
+    obb[:, 0] = bbox[:, 3] - bbox[:, 0]
+    obb[:, 1] = bbox[:, 4] - bbox[:, 1]
+    obb[:, 2] = bbox[:, 5] - bbox[:, 2]
+else:  # shape[1] == 3
+    obb = bbox
 
 assert((obb > 0).all())
 print(obb.shape, obb.dtype, obb[1])
@@ -120,18 +109,22 @@ df["obb_ratio_2"]  = obb[:,1] / df["bbox_max_length"]
 imageShape = images.shape
 
 # scaled to value between 0~1.0
-FEATURES_SCALED = ["volume_bbox_ratio", "obb_ratio_1", "obb_ratio_2"]
-
+FEATURES_RATIO = ["volume_bbox_ratio", "obb_ratio_1", "obb_ratio_2"]
 
 FLOAT_SCALED = ["area_linear", "volume_linear"]
 # linear comparable
 df["area_linear"] = df["area"]**0.5
 df["volume_linear"] = df["volume"]**0.333333333333
 
-raw_FEATURES = FEATURES_SCALED + FEATURES_INT + FLOAT_SCALED
+raw_FEATURES = FEATURES_RATIO + FEATURES_INT + FLOAT_SCALED
 FEATURES = [c+"_scaled" for c in raw_FEATURES]
-scaler = MinMaxScaler().fit(df[raw_FEATURES])
-feature_columns = scaler.fit_transform(df[raw_FEATURES])
+scaler = MinMaxScaler().fit(df[raw_FEATURES])  ## input must be 2D array
+scaled_feature_array = scaler.fit_transform(df[raw_FEATURES])  # fine here, scaled to [0, 1]
+
+for i, c in enumerate(raw_FEATURES):  # feature_columns
+    df[c+"_scaled"] = scaled_feature_array[:, i]  
+
+### bug: all scaled data are nan, why?
 
 # some cat has very few samples, make sure they are in train set
 
@@ -147,6 +140,7 @@ def demo(feature_column):
 LABEL = "category_classified"
 using_feature_column = False
 if using_feature_column:
+    # todo: feature_column is not defined
     classes = feature_column.categorical_column_with_vocabulary_list(
           CATEGORY_LABEL, df[CATEGORY_LABEL].unique())
 
@@ -167,7 +161,7 @@ print(list(df.columns))
 # partition the data into training and testing splits using 75% of
 # the data for training and the remaining 25% for testing
 print("[INFO] split data...")
-#feature_columns[LABEL] = df[LABEL]
+
 
 #split = train_test_split(df, images, test_size=0.25, random_state=42)
 #(trainDataset, testDataset, trainImagesX, testImagesX) = split
@@ -197,16 +191,17 @@ from tensorflow.keras.utils import to_categorical
 #trainY = to_categorical(trainY)  #return None
 #testY = to_categorical(testY)
 
-# no category columns
+# no category columns, 
 trainAttrX = pd.DataFrame(trainDataset, columns = FEATURES)
 testAttrX = pd.DataFrame(testDataset, columns = FEATURES)
 
 ##########################################
-# create the MLP and CNN  models
+# create the MLP and CNN  models, number of columns
+print("multiple parameters data frame shape", trainAttrX.shape)
 mlp = create_mlp(trainAttrX.shape[1], regress=False)
-print("image shape, and images shape", result_shape, imageShape)
-# (16, 48, 1) (1920, 16, 48)
 
+print("image shape, and images shape", result_shape, imageShape)
+# from (16, 48, 1) to (1920, 16, 48)
 #assert result_shape[0]  == imageShape[0]
 cnn = create_cnn(*result_shape,  regress=False)  # single sample image input here
 
@@ -257,18 +252,6 @@ diff = preds - testY
 percentDiff = (diff / testY) * 100
 absPercentDiff = np.abs(percentDiff)
 
-"""
-# compute the mean and standard deviation of the absolute percentage
-# difference
-mean = np.mean(absPercentDiff)
-std = np.std(absPercentDiff)
 
-# finally, show some statistics on our
-locale.setlocale(locale.LC_ALL, "en_US.UTF-8")
-print("[INFO] avg. house price: {}, std house price: {}".format(
-    locale.currency(df["price"].mean(), grouping=True),
-    locale.currency(df["price"].std(), grouping=True)))
-print("[INFO] mean: {:.2f}%, std: {:.2f}%".format(mean, std))
-"""
 
 #########################################
