@@ -172,3 +172,6 @@ if compressingImage:
     processed_imagedata_filename = output_root_path + os.path.sep + "compressed_imagedata.npy"
 else:
     processed_imagedata_filename = output_root_path + os.path.sep + "processed_imagedata.npy"
+
+## saved model file to continue model fit
+saved_model_file = output_root_path + os.path.sep + "tf_model_saved"

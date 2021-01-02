@@ -2,6 +2,10 @@
 
 """
 
+_is_debug = False
+_using_saved_model = True  # 
+_using_mixed_input = True
+
 # before import tensorflow
 import logging
 logging.getLogger("tensorflow").setLevel(logging.ERROR)
@@ -11,12 +15,13 @@ import tensorflow
 import tensorflow as tf
 #tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)  # WARN =30
 
-tf.debugging.experimental.enable_dump_debug_info(
-    "/tmp/tfdbg2_logdir",
-    tensor_debug_mode="FULL_HEALTH",
-    circular_buffer_size=-1)
-# after running the model: run `tensorboard --logdir /tmp/tfdbg2_logdir`
-# NO_TENSOR, CURT_HEALTH, CONCISE_HEALTH, FULL_HEALTH
+if _is_debug:
+    tf.debugging.experimental.enable_dump_debug_info(
+        "/tmp/tfdbg2_logdir",
+        tensor_debug_mode="FULL_HEALTH",
+        circular_buffer_size=-1)
+    # after running the model: run `tensorboard --logdir /tmp/tfdbg2_logdir`
+    # NO_TENSOR, CURT_HEALTH, CONCISE_HEALTH, FULL_HEALTH
 
 
 from tensorflow.keras.layers import Dense
@@ -56,8 +61,8 @@ print("[INFO] loading classification data")
 df = pd.read_json(processed_metadata_filepath)
 
 images = np.load(processed_imagedata_filename)  # pickle array of object type: allow_pickle=True
-print("loaded images ndarray shape", images.shape)
-print("loaded images ndarray shape", images[0].shape)
+print("[INFO] loaded images ndarray shape", images.shape)
+
 # there is no need for reshape, np.stack(imagelist)
 #images = images.reshape((images.shape[0], images.shape[1], images.shape[2], 1))
 
@@ -89,12 +94,12 @@ else:  # shape[1] == 3
     obb = bbox
 
 assert((obb > 0).all())
-print(obb.shape, obb.dtype, obb[1])
 
-## TODO: double check
-print(obb[0])
+## debug print out obb sorting
+#print(obb.shape, obb.dtype, obb[1])
+#print(obb[0])
 obb.sort(axis=1)  # return None, inplace sort,  ascending order
-print(obb[0])
+#print(obb[0])
 df["bbox_max_length"] = obb[:,2]
 bbox_volume = np.prod(obb)
 df["volume_bbox_ratio"] = df["volume"]/bbox_volume
@@ -154,9 +159,9 @@ else:
     df[LABEL] = cat
 
 
-
 ###################################
-print(list(df.columns))
+if _is_debug: 
+    print(list(df.columns))
 
 # partition the data into training and testing splits using 75% of
 # the data for training and the remaining 25% for testing
@@ -171,11 +176,12 @@ print("[INFO] split data...")
 trainY = pd.DataFrame(trainDataset, columns = [LABEL])
 testY = pd.DataFrame(testDataset, columns = [LABEL])
 
-print("trainDataset ", trainDataset.shape, trainDataset)
-print("testDataset ", testDataset.shape, testDataset)
+if _is_debug:
+    print("trainDataset ", trainDataset.shape, trainDataset)
+    print("testDataset ", testDataset.shape, testDataset)
 
-print("trainY before encoding ", trainY.shape)
-print("testY before encoding ", testY.shape)
+    print("trainY before encoding ", trainY.shape)
+    print("testY before encoding ", testY.shape)
 
 #cat_one_hot = tf.one_hot(cat, np.max(cat))  # return a Tensor
 onehotencoder = OneHotEncoder()  # need 2D array instead of 1
@@ -184,8 +190,9 @@ trainY = onehotencoder.fit_transform(trainY).toarray()
 testY = onehotencoder.fit_transform(testY).toarray()
 total_classes = trainY.shape[1]
 
-print("trainY with one-hot encoding ", trainY.shape, trainY)
-print("testY with one-hot encoding ", testY.shape, testY)
+if _is_debug:
+    print("trainY with one-hot encoding ", trainY.shape, trainY)
+    print("testY with one-hot encoding ", testY.shape, testY)
 
 from tensorflow.keras.utils import to_categorical
 #trainY = to_categorical(trainY)  #return None
@@ -196,41 +203,46 @@ trainAttrX = pd.DataFrame(trainDataset, columns = FEATURES)
 testAttrX = pd.DataFrame(testDataset, columns = FEATURES)
 
 ##########################################
-# create the MLP and CNN  models, number of columns
-print("multiple parameters data frame shape", trainAttrX.shape)
-mlp = create_mlp(trainAttrX.shape[1], regress=False)
+if _using_saved_model and os.path.exists(saved_model_file):
+    print("[INFO] load previously saved model file: ", saved_model_file)
+    model = tensorflow.keras.models.load_model(saved_model_file)
+else:
+    print("[INFO] image shape, and images shape", result_shape, imageShape)
+    # from (16, 48, 1) to (1920, 16, 48)
+    #assert result_shape[0]  == imageShape[0]
+    cnn = create_cnn(*result_shape,  regress=False)  # single sample image input here
 
-print("image shape, and images shape", result_shape, imageShape)
-# from (16, 48, 1) to (1920, 16, 48)
-#assert result_shape[0]  == imageShape[0]
-cnn = create_cnn(*result_shape,  regress=False)  # single sample image input here
+    # create the MLP and CNN  models, number of columns
+    if _using_mixed_input:
+        print("[INFO] build multiple parameters data frame shape", trainAttrX.shape)
+        mlp = create_mlp(trainAttrX.shape[1], regress=False)
 
-# create the input to our final set of layers as the *output* of both
-# the MLP and CNN
-# Flatten()()
-combinedInput = Concatenate(axis=1)([mlp.output, cnn.output])
+        # create the input to our final set of layers as the *output* of both
+        # the MLP and CNN
+        # Flatten()()
+        combinedInput = Concatenate(axis=1)([mlp.output, cnn.output])
 
-# our final FC layer head will have two dense layers, 
-# the final one being our regression head
-x = Dense(4, activation="relu")(combinedInput)  # todo: how to decide the first param? 
-x = Dense(total_classes, activation="softmax")(x) 
-# https://www.analyticsvidhya.com/blog/2019/08/detailed-guide-7-loss-functions-machine-learning-python-code/
-# "softmax", "sigmoid" make no diff, is needed for multiple label classification
+        # our final FC layer head will have two dense layers, 
+        # the final one being our regression head
+        x = Dense(4, activation="relu")(combinedInput)  # todo: how to decide the first param? 
+        x = Dense(total_classes, activation="softmax")(x) 
+        # https://www.analyticsvidhya.com/blog/2019/08/detailed-guide-7-loss-functions-machine-learning-python-code/
+        # "softmax", "sigmoid" make no diff, is needed for multiple label classification
 
-# our final  will accept categorical/numerical data on the MLP
-# input and images on the CNN input, outputting a single value (the
-# predicted price of the house)
-model = Model(inputs=[mlp.input, cnn.input], outputs=x)
+        # our final  will accept categorical/numerical data on the MLP
+        # input and images on the CNN input, outputting a single value (the
+        # predicted price of the house)
+        model = Model(inputs=[mlp.input, cnn.input], outputs=x)
+    else:
+        model = cnn
 
-# todo:  simplify image model
+    #########################################
+    opt = Adam(lr=1e-6, decay=1e-5 / 200)  # from 1e-3 to
+    # the loss functions depends on the problem itself, for multiple classification 
+    model.compile(loss="categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
+    # sparse_categorical_crossentropy
 
-#########################################
-opt = Adam(lr=1e-6, decay=1e-5 / 200)  # from 1e-3 to
-# the loss functions depends on the problem itself, for multiple classification 
-model.compile(loss="categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
-# sparse_categorical_crossentropy
-
-# train the
+# train the model
 print("[INFO] training part recognition...")
 model.fit(
     [trainAttrX, trainImagesX], trainY,
@@ -242,16 +254,18 @@ model.fit(
 print("[INFO] predicting shape class")
 preds = model.predict([testAttrX, testImagesX])
 
-########################################
-# compute the difference between the *predicted* house prices and the
-# *actual* house prices, then compute the percentage difference and
-# the absolute percentage difference
+#####################################
+# save the model and carry on model fit in a second run
+# https://www.tensorflow.org/guide/keras/save_and_serialize
+model.save(saved_model_file)
 
-# todo: decode back then calc
+########################################
+# compute the difference between the *predicted*  and the *actual*  
+# # then compute the percentage difference 
+
+# TODO: decode back then calc the error
 diff = preds - testY
 percentDiff = (diff / testY) * 100
 absPercentDiff = np.abs(percentDiff)
-
-
 
 #########################################
