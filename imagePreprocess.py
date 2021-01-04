@@ -15,7 +15,7 @@ import cv2
 
 from input_parameters import *
 
-if datasetName == "fclib":
+if datasetName == "fclib" and compressingImage:
     sys.path.append(os.path.dirname(__file__) + os.path.sep + "compressImage")
     from compressImage import compressImageBlock as compressImageCpp
     from compressImage import compressImage
@@ -60,21 +60,25 @@ def collectImages(filename_stem, suffices):
         if compressingImage:
             img = compressImageCpp(img, block_size=block_size)
         images.append(img)
-
-    filename = os.path.basename(filename_stem)
+    
+    if suffices[0].endswith(".csv"):
+        filename = filename_stem + "_concat.png"
+    else:
+        filename = None
     if concatingImage:
         return concatImages(images, filename)
     else:
         return np.stack(images)
 
-def concatImages(images, filename):
-
-    # full filename  = root + filename suffix `_X.png`
-    #concat images
-    #im = cv2.hconcat(images)
+def concatImages(images, filename=None):
     im = np.concatenate(images, axis=1)
     # debug show image
     #showImage(im, title=filename)
+    if filename:
+        data = 255 * im # Now scale by 255
+        img = data.astype(np.uint8)
+        cv2.imwrite(filename, img)
+
     return im
 
 def needPadding(im, block_size=8):

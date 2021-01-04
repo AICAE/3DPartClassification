@@ -9,6 +9,7 @@ import os.path
 
 testing = False
 MechanicalOnly = True  # no electronics parts
+splittingFastenerCategory = True
 # can be further limited to fasteners of Mechanical parts
 
 # lower(), some fcstd may does not have step corresponding, some may have only step
@@ -19,6 +20,7 @@ from partConverter import convert
 
 ###########################
 # generate image by python + command line program written in C++
+#if generatingMultiViewImage:
 displayingMode = "Shaded"  # "WireFrame"
 # input image  size dumped from 3D views
 image_width = 480

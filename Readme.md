@@ -1,6 +1,14 @@
 
 
+
 ---
+
+https://github.com/yinyunie/3D-Shape-Analysis-Paper-List#shape-representation
+
+https://github.com/tobiagru/Deep-3D-Obj-Recognition
+
+https://github.com/dimatura/voxnet
+Shapenet from voxel to thickness,
 
 ## Workflow
 
@@ -24,6 +32,21 @@ https://www.tensorflow.org/tensorboard/debugger_v2
 
 `tf.debugging.enable_check_numerics`
 
+`tf.get_logger().setLevel('INFO')`
+
+#### freecad library dataset
+filter out category that has too smaller item. Actually, it has been done auto by tensorflow
+> WARN: group size is too small to split, skip this group
+
+fc_lib has only 3 groups for mechdata
+
+`tensorboard --logdir logs/scalars`  will plot the epoch_loss 
+
+#### thingi10k dataset
+
+`Subcategory` each cat is too smaller,
+while `Category`
+152/152 [==============================] - 18s 117ms/step - loss: 3.9862 - accuracy: 0.0250 - val_loss: 3.9852 - val_accuracy: 0.0280
 
 ### improve accuracy
 

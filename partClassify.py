@@ -13,7 +13,11 @@ logging.getLogger("tensorflow").setLevel(logging.ERROR)
 # import the necessary packages
 import tensorflow
 import tensorflow as tf
-#tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)  # WARN =30
+tf.get_logger().setLevel('ERROR')
+
+# Set CPU as available physical device
+my_devices = tf.config.experimental.list_physical_devices(device_type='CPU')
+tf.config.experimental.set_visible_devices(devices= my_devices, device_type='CPU')
 
 if _is_debug:
     tf.debugging.experimental.enable_dump_debug_info(
@@ -67,7 +71,7 @@ print("[INFO] loaded images ndarray shape", images.shape)
 #images = images.reshape((images.shape[0], images.shape[1], images.shape[2], 1))
 
 if datasetName == "Thingi10K":
-    CATEGORY_LABEL="Category"  
+    CATEGORY_LABEL="Category"  # "Category" is too coarse to classify
     SUBCATEGORY_LABEL="Subcategory"  # "Subcategory": "rc-vehicles",
     BBOX_LABEL="bbox"
     categories = pd.Series(df["Category"], dtype="category")
@@ -86,11 +90,11 @@ else:  # FreeCADLib
 bbox = np.stack(df[BBOX_LABEL].to_numpy())
 
 obb = np.zeros((bbox.shape[0], 3))
-if obb.shape[1] == 6:
+if bbox.shape[1] == 6:
     obb[:, 0] = bbox[:, 3] - bbox[:, 0]
     obb[:, 1] = bbox[:, 4] - bbox[:, 1]
     obb[:, 2] = bbox[:, 5] - bbox[:, 2]
-else:  # shape[1] == 3
+if bbox.shape[1] == 3:
     obb = bbox
 
 assert((obb > 0).all())
@@ -184,11 +188,13 @@ if _is_debug:
     print("testY before encoding ", testY.shape)
 
 #cat_one_hot = tf.one_hot(cat, np.max(cat))  # return a Tensor
-onehotencoder = OneHotEncoder()  # need 2D array instead of 1
+onehotencoder = OneHotEncoder()  # need 2D array instead of 1D
 #trainY = onehotencoder.fit_transform(trainY.reshape(trainY.shape[0],1)).toarray()
 trainY = onehotencoder.fit_transform(trainY).toarray()
 testY = onehotencoder.fit_transform(testY).toarray()
 total_classes = trainY.shape[1]
+# why the array `testY` 's shape is [itemsize, 3]
+# WARN: group size is too small to split, skip this group
 
 if _is_debug:
     print("trainY with one-hot encoding ", trainY.shape, trainY)
@@ -237,22 +243,20 @@ else:
         model = cnn
 
     #########################################
-    opt = Adam(lr=1e-6, decay=1e-5 / 200)  # from 1e-3 to
+    opt = Adam(lr=1e-5, decay=1e-5 / 200)  # lr: learning rate from 1e-3
     # the loss functions depends on the problem itself, for multiple classification 
     model.compile(loss="categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
     # sparse_categorical_crossentropy
 
+# init the weight values
 # train the model
 print("[INFO] training part recognition...")
 model.fit(
     [trainAttrX, trainImagesX], trainY,
     validation_data=([testAttrX, testImagesX], testY),  # test does not have all classes
     #validation_data=([trainAttrX, trainImagesX], trainY),  #tmp bypass error
-    epochs=5, batch_size=20)
+    epochs=25, batch_size=20)
 
-# make predictions on the testing data
-print("[INFO] predicting shape class")
-preds = model.predict([testAttrX, testImagesX])
 
 #####################################
 # save the model and carry on model fit in a second run
@@ -260,12 +264,27 @@ preds = model.predict([testAttrX, testImagesX])
 model.save(saved_model_file)
 
 ########################################
+# make predictions on the testing data
+preds = model.predict([testAttrX, testImagesX])
+
 # compute the difference between the *predicted*  and the *actual*  
 # # then compute the percentage difference 
 
-# TODO: decode back then calc the error
+# 
 diff = preds - testY
-percentDiff = (diff / testY) * 100
+percentDiff = np.sum(np.sum(np.abs(diff)) / np.sum(testY)) * 100
 absPercentDiff = np.abs(percentDiff)
+print("[INFO] validate prediction by test data, error percentage is: ", absPercentDiff)
 
 #########################################
+
+total_parameters = 0
+for variable in tf.compat.v1.trainable_variables():
+    # shape is an array of tf.Dimension
+    shape = variable.get_shape()
+    variable_parameters = 1
+    for dim in shape:
+        variable_parameters *= dim.value
+    print(variable, variable_parameters)
+    total_parameters += variable_parameters
+print("total trainable parameter count = ", total_parameters)

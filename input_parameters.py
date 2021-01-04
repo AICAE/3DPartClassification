@@ -6,8 +6,10 @@ import subprocess
 import shutil
 import glob
 
-generatingThicknessViewImage=True # also generate meta data for CAD geometry like step file
-generatingMultiViewImage=False # also generate meta data for CAD geometry like step file
+generatingThicknessViewImage = True # also generate meta data for CAD geometry like step file
+generatingMultiViewImage = not generatingThicknessViewImage 
+# also generate meta data for CAD geometry like step file
+
 #datasetName = "Thingi10K"       # all data in one folder
 #datasetName =  "ModelNet" not usable dataset !
 datasetName = "fclib"    
@@ -81,6 +83,9 @@ else:
     from fclib_parameters import *
     isMeshFile = False
 
+if generatingThicknessViewImage:
+    output_root_path = output_root_path + "_thickness"
+
 ##########################
 # preprocessing  meshlib meshed part dataset_metadata_filename
 ##########################
@@ -120,38 +125,37 @@ MultiViewApp=os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occQt/o
 ##############################
 image_suffix = ".png"
 view_count = 3
-# before random padding the image position
 
 ############## image preprocessing ############
-if datasetName == "Thingi10K":
-
-    binarizingImage = False
-    paddingImage = True
-    im_width, im_height = 60, 60   # before padding
-    #final image size to be learned by AI
-    IM_WIDTH, IM_HEIGHT = 64, 64
-
-    compressingImage = False #  
+binarizingImage = not generatingThicknessViewImage
+compressingImage = False and binarizingImage
+concatingImage = True
+## image pixel size has been hardcoded into view image generator apps
+if generatingThicknessViewImage:
+    im_width, im_height = 64, 64   # before padding
+    IM_WIDTH, IM_HEIGHT = 64, 64   # after padding
 else:
-    # image preprocessing
-    binarizingImage = True
-    paddingImage = True
-    im_width, im_height = 120, 120   # before padding
-    #final image size to be learned by AI
-    IM_WIDTH, IM_HEIGHT = 128, 128
+    if datasetName == "Thingi10K":
+        im_width, im_height = 60, 60   # before padding
+        #final image size to be learned by AI
+        IM_WIDTH, IM_HEIGHT = 64, 64
+ 
+    else:
+        im_width, im_height = 120, 120   # before padding
+        # final image size to be learned by AI
+        IM_WIDTH, IM_HEIGHT = 128, 128
 
-    ## compression  only for some CAD part
-    compressingImage = False #  compressed or not compressed, both working
-    block_size = 8  # can be 4,  4X4 binary pixels compressed into uint16
+        ## compression  only for some CAD part
+        compressingImage = False #  compressed or not compressed, both working
+        block_size = 8  # can be 4,  4X4 binary pixels compressed into uint16
 
-
+paddingImage = (IM_WIDTH > im_width) or (IM_HEIGHT > im_height)
 if compressingImage:
     result_shape = (IM_WIDTH//block_size, IM_HEIGHT//block_size, view_count)
 else:
     result_shape = (IM_WIDTH, IM_HEIGHT, view_count)
 
 ## concat
-concatingImage=True
 if concatingImage:
     result_shape = result_shape[0], result_shape[1]*view_count, 1
 else:

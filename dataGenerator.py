@@ -23,7 +23,7 @@ if using_threading:
 # json type from dict,  threading.Queue  is an synchronzied data structure
 PART_REGISTRY = OrderedDict()
 ERROR_REGISTRY = OrderedDict()
-nb_processed =0
+nb_processed = 0
 
 def get_filename_stem(input_filename):
     return input_filename[:input_filename.rfind(".")] 
@@ -131,7 +131,10 @@ def _process_input_file(input_file_path, output_file_path):
     if resumable and os.path.exists(json_file_path):
         return True
 
-    info = generate_metadata(input_file_path, json_file_path)
+    if isMeshFile:
+        info = generate_metadata(input_file_path, json_file_path)
+    else:
+        info = None
     input_metadata_file_path = input_file_path.replace(input_file_suffix, metadata_suffix)
     #hasPerfileMetadata = os.path.exists(input_metadata_file_path)
 

@@ -12,10 +12,19 @@ text book: mechanial design parts
 
 part identification, matching (hash)
 ==================
-### usable
-Fasteners
-Cylinders
-Pulleys
+### usable categories
+Fasteners                   1027
+Profiles EN                  808
+Cylinders                     15
+Bearings                       7
+
+### Fastener subcategories
+
+Bolts & Screws                 431
+Screws                         423
+Washers                        146
+RetainingRings                  13
+Nuts                             8
 
 ### not enough samples
  cable-chain-links

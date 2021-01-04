@@ -21,20 +21,30 @@ from imagePreprocess import collectImages
 dataset = []
 imagelist = []
 
-def process_image(image_stem, image_suffices):
-    try:
+if generatingThicknessViewImage:
+    image_suffices = ["_XY.csv", "_YZ.csv", "_ZX.csv"]
+else:
+    image_suffices = ["_0.png", "_1.png", "_2.png"]
+
+def process_image(image_stem, image_suffices, metadata):
+    if True:
         ims = collectImages(image_stem, image_suffices)  # it is quick enough
         if isinstance(ims, (np.ndarray, np.generic)):
-            imagelist.append(imagelist, ims)
+            imagelist.append(ims)
             dataset.append(metadata)  # image collection may fail
-    except Exception as e:
-        print(e)
-        print("error in processing image", image_stem)
+    else:
+        try:
+            ims = collectImages(image_stem, image_suffices)  # it is quick enough
+            if isinstance(ims, (np.ndarray, np.generic)):
+                imagelist.append(ims)
+                dataset.append(metadata)  # image collection may fail
+        except Exception as e:
+            print(e)
+            print("error in processing image", image_stem)
 
 if datasetName == "Thingi10K":
     CATEGORY_LABEL="Category"
     FILENAME_LABEL="File ID"
-    image_suffices = ["_XY.csv", "_YZ.csv", "_ZX.csv"]
 
     def process_entry(entry):
         # metadata has been collected and merged, still copy to dataset list to write as pandas.DataFrame
@@ -48,30 +58,34 @@ if datasetName == "Thingi10K":
         image_stem = filefolder + os.path.sep + input_file_stem
         # check: return NoneType /mnt/windata/MyData/Thingi10K_dataset_output/196196
         if all([os.path.exists(image_stem + s) for s in image_suffices]):
-            process_image(image_stem, image_suffices)
+            process_image(image_stem, image_suffices, entry)
         else:
-            #print("Can not find image files for ", image_stem)
-            pass
+            print("Can not find all view image files for the input ", image_stem)
+
 
 else:  # FreeCADLib
     CATEGORY_LABEL="category"
     FILENAME_LABEL="filename"
     columns = ["filename", "category", "subcategories", "path"]
-    image_suffices = ["_0.png", "_1.png", "_2.png"]
 
-    def procoss_entry(entry):
+    def process_entry(entry):
         filename = entry["filename"]
-        catetory = entry["category"]
+        category = entry["category"]
+        if splittingFastenerCategory and category == "Fasteners":
+            entry["category"] = entry["subcategories"][0]
         #"subcategories"
         filefolder = output_root_path + os.path.sep + entry["path"]
         assert os.path.exists(filefolder)
         input_file_stem = filename[:filename.rfind('.')]                
 
-        images = glob.glob(filefolder + os.path.sep + input_file_stem +"*"+image_suffix)
+        #images = glob.glob(filefolder + os.path.sep + input_file_stem +"*"+image_suffix)
         image_stem = filefolder + os.path.sep + input_file_stem
+        all_image_found = all([os.path.exists(image_stem + s) for s in image_suffices])
 
-        metadata_filename = glob.glob(filefolder + os.path.sep + input_file_stem + "*"+ metadata_suffix)
-        if metadata_filename and images:
+        # tmp hack
+        #metafolder = "/mnt/windata/MyData/freecad_library_output" + os.path.sep + entry["path"]
+        metadata_filename = glob.glob(metafolder + os.path.sep + input_file_stem + "*"+ metadata_suffix)
+        if metadata_filename and all_image_found:
             f=open(metadata_filename[0], "r")
             metadata = json.loads(f.read())
             metadata["filename"] = filename
@@ -79,10 +93,10 @@ else:  # FreeCADLib
             metadata["category"] = entry["category"]
             metadata["subcategories"] = entry["subcategories"]
 
-            process_image(image_stem, image_suffices)
+            process_image(image_stem, image_suffices, metadata)
         else:
             # about 10 can not find meta data files,  image dump may have error
-            print("Can not find metadata or image files ", input_file_stem)
+            print("Can not find metadata or all view image files ", input_file_stem)
 
 
 def process():
