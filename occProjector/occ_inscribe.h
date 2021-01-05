@@ -3,9 +3,13 @@
 /// lower and upper height
 typedef std::pair<scalar, scalar> Range;
 const Range VOID_RANGE = Range{0, 0};
+/// point cloud lib : depth image
+/// Eigen::Tensor
 typedef Eigen::Matrix<Range, Eigen::Dynamic, Eigen::Dynamic> Region;
 typedef std::vector<scalar> InscribedShapeT;
 
+//#include <unsupported/Eigen/CXX11/Tensor>
+//Eigen::Tensor<double, 3> epsilon(3,3,3);
 
 /// calc real volume if grid_cell's area is given as the second parameter
 scalar volume(const Region& mat, const scalar cell_area = 1)
@@ -51,8 +55,8 @@ std::array<scalar, DIM> center_of_mass(const Region& mat, const scalar volume)
 Coordinate translate(std::array<scalar, DIM> coord, const GridInfo& gInfo)
 {
     int r = 0;  int c = 1; int t = 2;
-    auto x = gInfo.min[r] + gInfo.spaces[r] * coord[0];
-    auto y = gInfo.min[c] + gInfo.spaces[c] * coord[1];
+    auto x = gInfo.starts[r] + gInfo.spaces[r] * coord[0];
+    auto y = gInfo.starts[c] + gInfo.spaces[c] * coord[1];
     return Coordinate(x, y, coord[2]);
 }
 
@@ -62,7 +66,7 @@ std::array<size_t, DIM> calc_grid_indices(std::array<scalar, DIM> coord, const G
     std::array<size_t, DIM> ind;
     for(size_t i=0; i<DIM; i++)
     {
-        ind[i] = std::round((coord[i] - gInfo.min[i])/ gInfo.spaces[i]);
+        ind[i] = std::round((coord[i] - gInfo.starts[i])/ gInfo.spaces[i]);
         //ind[i] = std::clamp(ind[i], 0, gInfo.nsteps[i]);
     }
     return ind;
@@ -127,19 +131,6 @@ inline bool approximate(scalar a, scalar b)
     return std::abs(a-b) < 1e-3  or std::abs(a-b) < std::abs(a+b) * 1e-4;  // CONSIDER
 }
 
-/// this is not tested
-void sort_intersection(IntersectionMat& mat)
-{
-    for (size_t r=0; r< mat.rows(); r++)
-    {
-        for (size_t c=0; c< mat.cols(); c++)
-        {
-            auto& p = mat(r,c);
-            if (p and p->size())
-                std::sort((*p).begin(), (*p).end());           
-        }
-    }
-}
 
 /// check only 2 directions, is that sufficient?
 /// todo: there is possibility that more than one ranges are connected with previous range

@@ -71,9 +71,14 @@ const unsigned int NVIEWS = 3;
 #else
 const unsigned int NVIEWS = 3;
 #endif
-const int DIM=3;  
+const int DIM=3;
+
+// this can be set, but must be set before call any functions.
 std::array<size_t, DIM> NGRIDS = {64, 64, 64};  // make it diff to test image size
-const bool USE_OBB = false;
+const bool NORMALIZED_THICKNESS = true;  // normalized to [0,1] according to boundbox minmax
+
+// normalized XYZ according to OBB, if input geometry has been oriented, then use AABB, not OBB
+bool USE_OBB = false;
 
 template <typename T> 
 using Mat = Eigen::Matrix<std::shared_ptr<T>, Eigen::Dynamic, Eigen::Dynamic> ;
@@ -96,12 +101,10 @@ void init_matrix(Mat<T>& mat)
 }
 
 
-
-/// linear grid (equally-spaced in one axis), 3D grid, voxel
+/// linear point grid (equally-spaced in one axis), 3D grid, slightly bigger than bound box
 struct GridInfo
 {
-    std::array<double, DIM> min;
-    //std::array<double, DIM> max;
+    std::array<double, DIM> starts; // 
     std::array<double, DIM> spaces;
     std::array<size_t, DIM> nsteps;  // npixels (cells) in each axis
 };
@@ -113,6 +116,38 @@ struct MeshData
     gp_Trsf local_transform;
 };
 
+/// normalized to aspect ratios all one
+GridInfo generate_grid(const BoundBoxType bbox)
+{
+    double xmin, ymin, zmin, xmax, ymax, zmax;
+    xmin = bbox[0], ymin = bbox[1], zmin = bbox[2];
+    xmax = bbox[3], ymax = bbox[4], zmax = bbox[5];
+
+    int sh = 1;  //  margin extention, must be integer 1, other value not tested
+    std::array<double, DIM> spaces = {(xmax-xmin)/(NGRIDS[0]-2*sh), 
+            (ymax-ymin)/(NGRIDS[1]-2*sh), (zmax-zmin)/(NGRIDS[2]-2*sh)};
+    std::array<double, DIM> starts = {xmin - spaces[0] * 0.5 * sh, 
+            ymin - spaces[1] * 0.5 * sh, zmin - spaces[2] * 0.5 * sh};  // first cell's center
+    // {xmin, ymin, zmin}, {xmax, ymax, zmax}, 
+    GridInfo gInfo{starts, spaces, {NGRIDS[0], NGRIDS[1], NGRIDS[1]}};
+
+    return gInfo;
+}
+
+BoundBoxType calcBoundBox(const TopoDS_Shape& shape)
+{
+    Bnd_Box bbox;
+    BRepBndLib::Add(shape, bbox);
+    double xmin, xmax, ymin, ymax, zmin, zmax;
+    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+    return {xmin, ymin, zmin, xmax, ymax, zmax};
+}
+
+GridInfo generate_grid(const TopoDS_Shape& shape)
+{
+    // must be rotated with AABB = OBB,  AABB (Axis-align) is `class Bnd_Box`
+    return generate_grid(calcBoundBox(shape));
+}
 
 /// currently brep only, assuming single solid
 TopoDS_Shape read_geometry(std::string filename)
@@ -314,38 +349,38 @@ void init_intersection_data(IntersectionData& data)
     }
 }
 
-
-GridInfo generate_grid(const BoundBoxType bbox)
+void sort_intersection(IntersectionMat& mat)
 {
-    double xmin, ymin, zmin, xmax, ymax, zmax;
-    xmin = bbox[0], ymin = bbox[1], zmin = bbox[2];
-    xmax = bbox[3], ymax = bbox[4], zmax = bbox[5];
-    int sh = 1;  //  margin extention, must be integer 1, other value not tested
-    std::array<double, DIM> spaces = {(xmax-xmin)/(NGRIDS[0]-2*sh), 
-            (ymax-ymin)/(NGRIDS[1]-2*sh), (zmax-zmin)/(NGRIDS[2]-2*sh)};
-    std::array<double, DIM> starts = {xmin - spaces[0] * 0.5 * sh, 
-            ymin - spaces[1] * 0.5 * sh, zmin - spaces[2] * 0.5 * sh};  // first cell's center
-      
-    GridInfo gInfo{starts, spaces, {NGRIDS[0], NGRIDS[1], NGRIDS[1]}};
-
-    return gInfo;
+    for (size_t r=0; r< mat.rows(); r++)
+    {
+        for (size_t c=0; c< mat.cols(); c++)
+        {
+            auto& p = mat(r,c);
+            if (p and p->size())
+                std::sort((*p).begin(), (*p).end());           
+        }
+    }
 }
 
-GridInfo generate_grid(const TopoDS_Shape& shape)
+void normalize_intersection(IntersectionMat& mat, const std::pair<scalar, scalar> minmax)
 {
-    // must be rotated with AABB = OBB,  AABB (Axis-align) is `class Bnd_Box`
-
-    Bnd_Box box;
-    BRepBndLib::Add(shape, box);
-
-    double xmin, xmax, ymin, ymax, zmin, zmax;
-    box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
-    
-    return generate_grid({xmin, ymin, zmin, xmax, ymax, zmax});
+    auto fh = minmax.second - minmax.first;
+    for (size_t r=0; r< mat.rows(); r++)
+    {
+        for (size_t c=0; c< mat.cols(); c++)
+        {
+            auto& p = mat(r,c);
+            if (p and p->size())
+            {
+                for(size_t i=0; i<p->size(); i++)
+                    (*p)[i] = ((*p)[i] - minmax.first) / fh;
+            }         
+        }
+    }
 }
 
 
-std::vector<std::array<size_t,2>> get_index_ranges(const std::vector<const Coordinate*>& polygon, const GridInfo ginfo)
+std::vector<std::array<size_t,2>> get_index_ranges(const std::vector<const Coordinate*>& polygon, const GridInfo gInfo)
 {
     std::vector<std::array<size_t,2>> ranges;
     for(int iaxis = 0; iaxis < DIM; iaxis++)
@@ -356,18 +391,18 @@ std::vector<std::array<size_t,2>> get_index_ranges(const std::vector<const Coord
             v.push_back((*p).Coord(iaxis+1));   /// NOTE: index for X is 1 not 0
         }
         auto min_i = std::distance(v.cbegin(), std::min_element(v.cbegin(), v.cend()));
-        size_t imin = size_t((v[min_i] - ginfo.min[iaxis]) / ginfo.spaces[iaxis] ) - 1;
+        size_t imin = size_t((v[min_i] - gInfo.starts[iaxis]) / gInfo.spaces[iaxis] ) - 1;
         if(imin < 0)
         {
             imin = 0;
         }
         auto max_i = std::distance(v.cbegin(), std::max_element(v.cbegin(), v.cend()));
         /// should be rounded up for max, not to miss some point
-        size_t imax = size_t((v[max_i] - ginfo.min[iaxis]) / ginfo.spaces[iaxis] ) + 1;
-        if (imax > ginfo.nsteps[iaxis] - 1)
+        size_t imax = size_t((v[max_i] - gInfo.starts[iaxis]) / gInfo.spaces[iaxis] ) + 1;
+        if (imax > gInfo.nsteps[iaxis] - 1)
         {
-            std::cout << "Error:  i_upper " << imax << " >= grid number " << ginfo.nsteps[iaxis] << std::endl;
-            imax = ginfo.nsteps[iaxis] -1;
+            std::cout << "Error:  i_upper " << imax << " >= grid number " << gInfo.nsteps[iaxis] << std::endl;
+            imax = gInfo.nsteps[iaxis] -1;
         }
         ranges.push_back({imin, imax});
     }
@@ -375,7 +410,7 @@ std::vector<std::array<size_t,2>> get_index_ranges(const std::vector<const Coord
 }
 
 //const std::vector<Coordinate>& points, const std::array<int, 3>& tri
-void insert_intersections(const std::vector<const Coordinate*>& triangle, const GridInfo& ginfo, IntersectionData& data)
+void insert_intersections(const std::vector<const Coordinate*>& triangle, const GridInfo& gInfo, IntersectionData& data)
 {
     // get box bound for the tri, project to one plane, get possible indices from the grid
     //const auto iranges = get_index_ranges(triangle, ginfo);  // bug here, but why?
@@ -392,8 +427,8 @@ void insert_intersections(const std::vector<const Coordinate*>& triangle, const 
         gp_Vec dir(0, 0, 0);
         dir.SetCoord(third_index + 1, 1.0);
         // this must be bigger than boundbox range (min, max), it is fine here
-        double third_min = ginfo.min[third_index] - ginfo.spaces[third_index];
-        double third_max = ginfo.min[third_index] + ginfo.spaces[third_index] * (ginfo.nsteps[third_index]+1);
+        double third_min = gInfo.starts[third_index] - gInfo.spaces[third_index];
+        double third_max = gInfo.starts[third_index] + gInfo.spaces[third_index] * (gInfo.nsteps[third_index]+1);
 
 
         IntersectionMat& mat = *data[iaxis];
@@ -401,8 +436,8 @@ void insert_intersections(const std::vector<const Coordinate*>& triangle, const 
         {
             for(size_t c = c_start; c <= c_end; c++)
             {
-                double r_value = ginfo.min[r_index] + ginfo.spaces[r_index] * r;
-                double c_value = ginfo.min[c_index] + ginfo.spaces[c_index] * c;
+                double r_value = gInfo.starts[r_index] + gInfo.spaces[r_index] * r;
+                double c_value = gInfo.starts[c_index] + gInfo.spaces[c_index] * c;
 
                 gp_Vec pos(0, 0, 0);  // occt index starts at 1, not zero
                 pos.SetCoord(r_index+1, r_value);
@@ -473,3 +508,4 @@ void calc_intersections(const Handle(Poly_Triangulation) triangles, const GridIn
         insert_intersections(triangle, ginfo, data);
     }
 }
+

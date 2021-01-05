@@ -2,10 +2,15 @@
 /// Created on Sunday, Nov 01 2020
 
 #include "occ_project.h"
+#include "geometryProperty.cpp"
 
 typedef Eigen::MatrixXf Image;
 const std::vector<std::string> PNAMES = {"_XY", "_YZ", "_ZX"};  // rolling
 const std::string IM_SUFFIX = ".csv";
+
+const bool MERGE_3_INTERSECTION = true;  // ModeNet stl mesh has self-intersection faces
+
+// PCL has a tool `mesh2pcd`: convert a CAD model to a PCD (Point Cloud Data) file, using ray tracing operations.
 
 
 //typedef std::array<double, 3> Coordinate;   gp_Pnt,  gp_XYZ instead
@@ -16,6 +21,21 @@ void save_image(const Image& im, const std::string& filename)
     file << im.format(CSVFormat);
 }
 
+void calc_nearest(const IntersectionMat& mat, Image& im)
+{
+    for (size_t r=0; r< mat.rows(); r++)
+    {
+        for (size_t c=0; c< mat.cols(); c++)
+        {
+            const auto& p = mat(r,c);
+            const auto n = p->size();
+            if(n==0)
+                im(r, c) = 0.0f;
+            else
+                im(r, c) = (*p)[0]; // assuming has been sorted
+        }
+    }
+}
 
 std::set<std::pair<size_t, size_t>> calc_thickness(const IntersectionMat& mat, Image& im)
 {
@@ -30,9 +50,17 @@ std::set<std::pair<size_t, size_t>> calc_thickness(const IntersectionMat& mat, I
                 im(r, c) = 0.0f;
             else if (n%2 == 1)
             {
+                if(MERGE_3_INTERSECTION and n==3)
+                {
+                    auto min = *std::min_element(p->begin(), p->end());
+                    auto max = *std::max_element(p->begin(), p->end());
+                    im(r, c) = std::abs(max - min); 
+                }
+                else{
                 std::cout << "Error: intersection vector size " << n << " is not an even number " << r << ", " << c <<"\n";
                 im(r, c) = 0.0f;   // set zero, or intoperation later
                 error_pos.insert({r, c});
+                }
             }
             else if(n==2)
                 im(r, c) = std::abs((*p)[0] - (*p)[1]);
@@ -111,12 +139,17 @@ void test_IndexedMap()
 
 
 /// find after faceting, 
-void save_data(const IntersectionData& data, const std::string& output_file_stem)
+void save_data(IntersectionData& data, const std::string& output_file_stem, const BoundBoxType& bbox)
 {
-    // 4. find the line-face intersection
+
     for(int i=0; i<NVIEWS; i++)
     {
-        const auto& mat = *data[i];
+        auto& mat = *data[i];
+        std::pair<scalar, scalar> minmax = {bbox[i], bbox[i+DIM]};
+        sort_intersection(mat);
+        if(NORMALIZED_THICKNESS)
+            normalize_intersection(mat, minmax);
+
         Image im(mat.rows(), mat.cols());
         auto error_pos = calc_thickness(mat, im);
         double threshold = 0.05;
@@ -134,6 +167,12 @@ void save_data(const IntersectionData& data, const std::string& output_file_stem
                 interoplate_thickness(error_pos, im);
             }
             save_image(im, output_file_stem + PNAMES[i] + IM_SUFFIX);
+        }
+        if (NORMALIZED_THICKNESS)
+        {
+            Image sim(mat.rows(), mat.cols());
+            calc_nearest(mat, sim);
+            save_image(im, output_file_stem + "_nearest"+ PNAMES[i] + IM_SUFFIX);
         }
     }
 }
@@ -248,14 +287,16 @@ int project(std::string input, const std::string& output_file_stem)
         calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
     }
     // save thickness matrix as numpy array,  scale it?  save as image?
-
-    save_data(data, output_file_stem);
+    
+    save_data(data, output_file_stem, calcBoundBox(shape));
 
 #ifndef NDEBUG
     auto stl_exporter = StlAPI_Writer(); // high level API
     stl_exporter.Write(shape, (input + "_meshed.stl").c_str()); 
     // shape must has mesh for each face
 #endif
+
+    writeMetadataFile(shape, output_file_stem + "_metadata.json");
 
     return 0;
 }
@@ -276,7 +317,7 @@ int project_mesh(std::string input, const std::string& output_file_stem, const B
     calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
 
     // save thickness matrix as numpy array,  scale it?  save as image?
-    save_data(data, output_file_stem);
+    save_data(data, output_file_stem, bbox);
 
     return 0;
 }
@@ -299,10 +340,8 @@ int main(int argc, char *argv[]) {
     .default_value(std::vector<int>{64, 64, 64})
     .action([](const std::string& value) { return std::stoi(value); });
 
-
   program.add_argument("--bbox").nargs(6)
     .help("boundbox values for stl off input file: xmin, ymin, zmin, xmax, ymax, zmax")
-    //.default_value(std::array<double, 6>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0})
     .action([](const std::string& value) { return std::stod(value); });
 
   program.add_argument("--bop")
@@ -310,16 +349,28 @@ int main(int argc, char *argv[]) {
     .default_value(false)
     .implicit_value(true);
 
-  try {
-    program.parse_args(argc, argv);
-  }
-  catch (const std::runtime_error& err) {
-    std::cout << err.what() << std::endl;
-    std::cout << program;
-    exit(0);
-  }
-  
-    //test_IndexedMap();
+  program.add_argument("--obb")
+    .help("use the OBB, instead of default axis-align bound box")
+    .default_value(false)
+    .implicit_value(true);
+
+    try {
+        program.parse_args(argc, argv);
+    }
+    catch (const std::runtime_error& err) {
+        std::cout << err.what() << std::endl;
+        std::cout << program;
+        exit(0);
+    }
+
+
+    USE_OBB = program.get<bool>("--obb");  // set global variable
+    //if(program.present("--grid"))  // present() must not have a default value
+    {
+        std::vector<int> grid = program.get<std::vector<int>>("--grid");
+        NGRIDS = {grid[0], grid[1], grid[2]};  // set global variable
+    }
+
     auto input = program.get<std::string>("input");
     std::string output_stem = input;
     if(program.present("-o"))
