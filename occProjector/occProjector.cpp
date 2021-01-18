@@ -6,10 +6,21 @@
 
 typedef Eigen::MatrixXf Image;
 const std::vector<std::string> PNAMES = {"_XY", "_YZ", "_ZX"};  // rolling
+const std::vector<std::string> TRINAMES = {"_TRI_XY", "_TRI_YZ", "_TRI_ZX"}; 
+
+#define USE_OPENCV 1
+#if USE_OPENCV
+// OpenImageIO can be another choice
+#include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
+const std::string IM_SUFFIX = ".png";
+#else
+
 const std::string IM_SUFFIX = ".csv";
+#endif
 
 const bool MERGE_3_INTERSECTION = true;  // ModeNet stl mesh has self-intersection faces
-
+bool USE_TRIVIEW = false;
 // PCL has a tool `mesh2pcd`: convert a CAD model to a PCD (Point Cloud Data) file, using ray tracing operations.
 
 
@@ -19,6 +30,25 @@ void save_image(const Image& im, const std::string& filename)
     const static Eigen::IOFormat CSVFormat(4, 0, ", ", "\n");
     std::ofstream file(filename.c_str());
     file << im.format(CSVFormat);
+}
+
+/// Image has been sorted and normalized into [0, 1] range, then save to png file
+void save_image(const Image& tim, const std::string& filename, const IntersectionMat& mat)
+{
+    cv::Mat im(mat.rows(), mat.cols(), CV_8UC3, cv::Scalar(0,0,0));
+    for (size_t r=0; r< mat.rows(); r++)
+    {
+        for (size_t c=0; c< mat.cols(); c++)
+        {
+            const auto& p = mat(r,c);
+            const auto n = p->size();
+            if(n>=2)
+            {
+                im.at<cv::Vec3b>(r, c) = {(*p)[0] *255, tim(r,c) * 255, (*p)[n-1] *255};
+            }
+        }
+    }
+    cv::imwrite(filename, im);
 }
 
 void calc_nearest(const IntersectionMat& mat, Image& im)
@@ -139,7 +169,8 @@ void test_IndexedMap()
 
 
 /// find after faceting, 
-void save_data(IntersectionData& data, const std::string& output_file_stem, const BoundBoxType& bbox)
+void save_data(IntersectionData& data, const std::string& output_file_stem, 
+                const BoundBoxType& bbox, const std::vector<std::string> PNAMES)
 {
 
     for(int i=0; i<NVIEWS; i++)
@@ -156,23 +187,28 @@ void save_data(IntersectionData& data, const std::string& output_file_stem, cons
         if (std::size(error_pos) > mat.rows() * mat.cols() * threshold)
         {
             std::cout << "Error: image will not be saved as total number of odd thickness vector size " << 
-                std::size(error_pos) << " is higher than the threshold percentage " <<  0.05 * 100 <<"\n";
+                std::size(error_pos) << " is higher than the threshold percentage " <<  threshold * 100 <<"\n";
+            continue;
         }
         else
         {
             if(std::size(error_pos) > 0)
             {
                 std::cout << "Warning: total number of odd thickness vector size " << std::size(error_pos) << 
-                    ",  less than threshold" <<  0.05 * 100 << " percentage, will be interpolated\n";
+                    ",  less than threshold " <<  threshold * 100 << " percentage, will be interpolated\n";
                 interoplate_thickness(error_pos, im);
             }
+            #if USE_OPENCV
+            save_image(im, output_file_stem + PNAMES[i] + IM_SUFFIX, mat);
+            #else
             save_image(im, output_file_stem + PNAMES[i] + IM_SUFFIX);
-        }
-        if (NORMALIZED_THICKNESS)
-        {
-            Image sim(mat.rows(), mat.cols());
-            calc_nearest(mat, sim);
-            save_image(im, output_file_stem + "_nearest"+ PNAMES[i] + IM_SUFFIX);
+            if (NORMALIZED_THICKNESS)
+            {
+                Image sim(mat.rows(), mat.cols());
+                calc_nearest(mat, sim);
+                save_image(im, output_file_stem + "_nearest"+ PNAMES[i] + IM_SUFFIX);
+            }
+            #endif
         }
     }
 }
@@ -270,10 +306,14 @@ int bop(std::string input, const std::string& output_file_stem)
 
 
 /// triangulation, fast less precise than BOP
-int project(std::string input, const std::string& output_file_stem)
+int project(std::string input, const std::string& output_file_stem, bool triview=false)
 {
     Bnd_OBB obb;
     auto shape = prepare_shape(input, obb);
+    if (triview)
+    {
+        shape = rotate_shape(shape);
+    }
     MeshData mesh;
     mesh.grid_info = generate_grid(shape);
 
@@ -287,10 +327,18 @@ int project(std::string input, const std::string& output_file_stem)
         calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
     }
     // save thickness matrix as numpy array,  scale it?  save as image?
-    
-    save_data(data, output_file_stem, calcBoundBox(shape));
+    if (triview)
+    {
+        save_data(data, output_file_stem, calcBoundBox(shape), TRINAMES);
+    }
+    else
+    {
+        save_data(data, output_file_stem, calcBoundBox(shape), PNAMES); 
+    }
 
-#ifndef NDEBUG
+
+//#ifndef NDEBUG
+#if 0
     auto stl_exporter = StlAPI_Writer(); // high level API
     stl_exporter.Write(shape, (input + "_meshed.stl").c_str()); 
     // shape must has mesh for each face
@@ -300,8 +348,6 @@ int project(std::string input, const std::string& output_file_stem)
 
     return 0;
 }
-
-
 
 
 int project_mesh(std::string input, const std::string& output_file_stem, const BoundBoxType bbox)
@@ -317,7 +363,7 @@ int project_mesh(std::string input, const std::string& output_file_stem, const B
     calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
 
     // save thickness matrix as numpy array,  scale it?  save as image?
-    save_data(data, output_file_stem, bbox);
+    save_data(data, output_file_stem, bbox, PNAMES);
 
     return 0;
 }
@@ -349,6 +395,11 @@ int main(int argc, char *argv[]) {
     .default_value(false)
     .implicit_value(true);
 
+  program.add_argument("--xyz")
+    .help("generate extra tri views")
+    .default_value(false)
+    .implicit_value(true);
+
   program.add_argument("--obb")
     .help("use the OBB, instead of default axis-align bound box")
     .default_value(false)
@@ -363,7 +414,7 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
 
-
+    USE_TRIVIEW = program.get<bool>("--xyz");
     USE_OBB = program.get<bool>("--obb");  // set global variable
     //if(program.present("--grid"))  // present() must not have a default value
     {
@@ -397,6 +448,8 @@ int main(int argc, char *argv[]) {
         else
         {
             project(input, output_stem);
+            if (USE_TRIVIEW)
+                project(input, output_stem, USE_TRIVIEW);
         }
     }
     

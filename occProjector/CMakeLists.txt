@@ -36,6 +36,13 @@ else()
 endif()
 
 
+#find_package( OpenCV REQUIRED )
+# can not install libopencv-dev for confliction, here is the hack on ubuntu
+# install libopencv-core-dev  libopencv-imgcodecs-dev
+set(OpenCV_INCLUDE_DIRS "/usr/include/opencv4")
+set(OpenCV_LIBS "opencv_core" "opencv_imgcodecs")
+
+include_directories( ${OpenCV_INCLUDE_DIRS} )
 
 INCLUDE_DIRECTORIES(${OCC_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(.)
@@ -47,7 +54,7 @@ ADD_EXECUTABLE(occProjector occProjector.cpp)
 TARGET_LINK_LIBRARIES(occProjector  ${OCC_LINK_LIBS})
 #TARGET_LINK_LIBRARIES(occProjector ${CGAL_LIBRARY})
 target_link_libraries(occProjector Eigen3::Eigen)
-
+target_link_libraries(occProjector ${OpenCV_LIBS})
 
 ########################################################
 ADD_EXECUTABLE(occ_inscribe occ_inscribe.cpp)

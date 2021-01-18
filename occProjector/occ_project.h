@@ -123,13 +123,13 @@ GridInfo generate_grid(const BoundBoxType bbox)
     xmin = bbox[0], ymin = bbox[1], zmin = bbox[2];
     xmax = bbox[3], ymax = bbox[4], zmax = bbox[5];
 
-    int sh = 1;  //  margin extention, must be integer 1, other value not tested
-    std::array<double, DIM> spaces = {(xmax-xmin)/(NGRIDS[0]-2*sh), 
-            (ymax-ymin)/(NGRIDS[1]-2*sh), (zmax-zmin)/(NGRIDS[2]-2*sh)};
-    std::array<double, DIM> starts = {xmin - spaces[0] * 0.5 * sh, 
-            ymin - spaces[1] * 0.5 * sh, zmin - spaces[2] * 0.5 * sh};  // first cell's center
+    int m = 1;  //  margin extention on each side, must be integer 1 cell width, other value not tested
+    std::array<double, DIM> spaces = {(xmax-xmin)/(NGRIDS[0]-2*m), 
+            (ymax-ymin)/(NGRIDS[1]-2*m), (zmax-zmin)/(NGRIDS[2]-2*m)};
+    std::array<double, DIM> starts = {xmin - spaces[0] * 0.5 * m, 
+            ymin - spaces[1] * 0.5 * m, zmin - spaces[2] * 0.5 * m};  // first cell's center
     // {xmin, ymin, zmin}, {xmax, ymax, zmax}, 
-    GridInfo gInfo{starts, spaces, {NGRIDS[0], NGRIDS[1], NGRIDS[1]}};
+    GridInfo gInfo{starts, spaces, {NGRIDS[0]-1, NGRIDS[1]-1, NGRIDS[1]-1}};  // 
 
     return gInfo;
 }
@@ -159,6 +159,33 @@ TopoDS_Shape read_geometry(std::string filename)
     return shape;
 }
 
+TopoDS_Shape  rotate_shape(const TopoDS_Shape& shape)
+{
+    Bnd_Box bbox;
+    BRepBndLib::Add(shape, bbox);
+    double xmin, xmax, ymin, ymax, zmin, zmax;
+    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+    double xL=xmax-xmin;
+    double yL=ymax-ymin;
+    double zL=zmax-zmin;
+
+    gp_Trsf trsf;
+    if(NORMALIZED_THICKNESS)
+    {
+        trsf.SetRotation(gp::OX(), M_PI/4.0);    // will rotation add up?
+        trsf.SetRotation(gp::OY(), M_PI/4.0);    
+        //trsf.SetRotation(gp::OZ(), M_PI/4.0);    
+    }
+    else
+    {
+        trsf.SetRotation(gp::OX(), std::atan(zL/yL));    
+        trsf.SetRotation(gp::OY(), std::atan(xL/zL));    
+        //trsf.SetRotation(gp::OZ(), std::atan(yL/xL)); 
+    } 
+    auto t = BRepBuilderAPI_Transform(shape, trsf, true);
+
+    return t.Shape();
+}
 
 /// for STEP, BREP shape input files, first of all, imprint and merge
 /// rotate shape with OBB to AABB, can also translate
@@ -272,13 +299,13 @@ int calc_intersection(const std::vector<const Coordinate*> tri, const std::vecto
     gp_Vec    u, v, n;              // triangle vectors
     gp_Vec    w0, w;                // ray vectors
     scalar     r, a, b;              // params to calc ray-plane intersect
-    const scalar SMALL_NUM = 1e-8;
+    const scalar SMALL_NUM = 1e-30;    //
 
     // get triangle edge vectors and plane normal
     u = (*tri[1]) - (*tri[0]);
     v = (*tri[2]) - (*tri[0]);
     n = u.Crossed(v);                 // cross product
-    if (n.Magnitude() < 10e-12)    // triangle is degenerate, zero area?
+    if (n.Magnitude() < 1e-308)    // triangle is degenerate, zero area?
         return -1;                     // do not deal with this case
          
     w0 = *(R[0]) - (*tri[0]);
@@ -390,19 +417,20 @@ std::vector<std::array<size_t,2>> get_index_ranges(const std::vector<const Coord
         {
             v.push_back((*p).Coord(iaxis+1));   /// NOTE: index for X is 1 not 0
         }
-        auto min_i = std::distance(v.cbegin(), std::min_element(v.cbegin(), v.cend()));
-        size_t imin = size_t((v[min_i] - gInfo.starts[iaxis]) / gInfo.spaces[iaxis] ) - 1;
-        if(imin < 0)
+        auto min_i = *std::min_element(v.cbegin(), v.cend());
+        // what happen if the mesh vertex coincides with projection mesh, minus 1 to be conservative
+        int imin = int((min_i - gInfo.starts[iaxis]) / gInfo.spaces[iaxis] ) - 1;
+        if(imin < 0)  // comparison with zero will be always true,   size_t i= 0,  i-1  is a very big number
         {
             imin = 0;
         }
-        auto max_i = std::distance(v.cbegin(), std::max_element(v.cbegin(), v.cend()));
+        auto max_i = *std::max_element(v.cbegin(), v.cend());
         /// should be rounded up for max, not to miss some point
-        size_t imax = size_t((v[max_i] - gInfo.starts[iaxis]) / gInfo.spaces[iaxis] ) + 1;
-        if (imax > gInfo.nsteps[iaxis] - 1)
+        size_t imax = size_t((max_i - gInfo.starts[iaxis]) / gInfo.spaces[iaxis] ) + 1;
+        if (imax > gInfo.nsteps[iaxis])
         {
             std::cout << "Error:  i_upper " << imax << " >= grid number " << gInfo.nsteps[iaxis] << std::endl;
-            imax = gInfo.nsteps[iaxis] -1;
+            imax = gInfo.nsteps[iaxis];
         }
         ranges.push_back({imin, imax});
     }
@@ -413,26 +441,32 @@ std::vector<std::array<size_t,2>> get_index_ranges(const std::vector<const Coord
 void insert_intersections(const std::vector<const Coordinate*>& triangle, const GridInfo& gInfo, IntersectionData& data)
 {
     // get box bound for the tri, project to one plane, get possible indices from the grid
-    //const auto iranges = get_index_ranges(triangle, ginfo);  // bug here, but why?
-    std::vector<std::array<size_t,2>> iranges = {{0, NGRIDS[0]}, {0, NGRIDS[1]}, {0, NGRIDS[2]}};
+    const auto iranges = get_index_ranges(triangle, gInfo);  /// BUG solved, negative int becomes very big size_t number
+    //std::vector<std::array<size_t,2>> iranges = {{0, NGRIDS[0]}, {0, NGRIDS[1]}, {0, NGRIDS[2]}};
 
     // if line and triangle intersection, then save the intersection coord's third-component
     for(int iaxis = 0; iaxis < 3; iaxis++)
     {
         size_t r_index = iaxis;
-        const auto [r_start, r_end] = iranges[r_index];
+        const size_t r_start = iranges[r_index][0];
+        const size_t r_end = iranges[r_index][1];
         size_t c_index = (1 + iaxis)==3? 0: 1 + iaxis;
-        const auto [c_start, c_end] = iranges[c_index];
+        const size_t c_start = iranges[c_index][0];
+        const size_t c_end = iranges[c_index][1];
         size_t third_index = (iaxis + 2)%3;
+        const size_t t_start = iranges[third_index][0];
+        const size_t t_end = iranges[third_index][1];
         gp_Vec dir(0, 0, 0);
         dir.SetCoord(third_index + 1, 1.0);
-        // this must be bigger than boundbox range (min, max), it is fine here
-        double third_min = gInfo.starts[third_index] - gInfo.spaces[third_index];
-        double third_max = gInfo.starts[third_index] + gInfo.spaces[third_index] * (gInfo.nsteps[third_index]+1);
+        // this ray must be bigger than boundbox range (min, max), it is fine here
+        double third_min = gInfo.starts[third_index] - gInfo.spaces[third_index] * gInfo.nsteps[third_index];
+        double third_max = gInfo.starts[third_index] + gInfo.spaces[third_index] * (gInfo.nsteps[third_index]*2);
 
+        double h_min = gInfo.starts[third_index] - gInfo.spaces[third_index] * t_start;
+        double h_max = gInfo.starts[third_index] + gInfo.spaces[third_index] * t_end;
 
         IntersectionMat& mat = *data[iaxis];
-        for(size_t r = r_start; r <= r_end; r++)  // r_end must also been used, closed range
+        for(size_t r =  r_start; r <= r_end; r++)  // r_end must also been used, closed range
         {
             for(size_t c = c_start; c <= c_end; c++)
             {
@@ -462,11 +496,18 @@ void insert_intersections(const std::vector<const Coordinate*>& triangle, const 
                 if (m == 1)
                 {
                     auto  h = I.Coord(third_index + 1);
-                    if (h < third_max && h > third_min)
+                    //if (h < third_max && h > third_min)  // this may needs to be narrowed down.
+                    if (h < h_max && h > h_min)
+                    {
+                        // if (r < r_start)
+                        //     std::cout << " intersection found at r index = " << r << " less than r_start =" << r_start << std::endl;
+                        // if (c < c_start)
+                        //     std::cout << " intersection found at c index = " << c << " less than c_start = " << c_start << std::endl;
                         mat(r, c)->push_back(h);
+                    }
                     else
                     {
-                        std::cout << " Error: intersection point out of bound box" << std::endl;
+                        std::cout << " Error: intersection point out of triangle bound box" << std::endl;
                     }
                     
                 }
@@ -475,6 +516,7 @@ void insert_intersections(const std::vector<const Coordinate*>& triangle, const 
         }
     }
 }
+
 
 
 void calc_intersections(const Handle(Poly_Triangulation) triangles, const GridInfo& ginfo, const gp_Trsf local_transform, IntersectionData& data) 
