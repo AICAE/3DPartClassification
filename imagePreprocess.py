@@ -33,18 +33,25 @@ def collectImages(filename_stem, suffices):
     filenames = [filename_stem + s for s in suffices]
     images = []
 
-    for f in filenames:
+    for i, f in enumerate(filenames):
         if f.endswith(".png"):
-            img = cv2.imread(f, 0)     # Load an color image in grayscale
-            #img = rgb2gray(img)
-            img = cv2.resize(img,(im_width, im_height))
+            if usingGrayscaleImage:
+                img = cv2.imread(f, 0)     # Load an color image in grayscale
+            else:
+                img = cv2.imread(f)  # color/ multiple channel
+                if usingOnlyThicknessChannel:
+                    img = img[:, :, 1]  # choose only the thickness channel
+            if img.shape != (im_width, im_height):
+                img = cv2.resize(img,(im_width, im_height))
         elif f.endswith(".csv"):
             im = np.loadtxt(f, delimiter=',')
-            #normalize,  because min is zero, to
-            immax = np.max(im) # some point, value to too big, NAN, that scaling to all zeros
-            if immax > 1e5 or immax < 1e-3:
-                return None
-            img = im/immax
+            if not normalizingImage:
+                immax = np.max(im) # some point, value to too big, NAN, that scaling to all zeros
+                if immax > 1e5 or immax < 1e-3:
+                    return None
+                img = im/immax
+            else:
+                img = im
         else:
             print("Error: image input suffix not supported", f)
 

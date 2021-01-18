@@ -8,7 +8,7 @@ from collections import OrderedDict
 
 
 using_threading = True  # false, can help debugging
-resumable= True  # carry on work left, Registry can not resume for the time being
+resumable = True  # carry on work left, Registry can not resume for the time being
 existing_dataset = {}
 
 from input_parameters import *
@@ -42,13 +42,14 @@ def generate_view_images(input_filename, is_thickness=True, working_dir=None, in
     
     #print(input_filename, working_dir)
     if is_thickness==True:
+        args = ["--grid", str(im_width), str(im_width), str(im_width) ]
         if isMeshFile:
             assert info
-            args = ["--bbox"] + [ str(v) for v in info["bbox"]]
+            args += ["--bbox"] + [ str(v) for v in info["bbox"]] 
             cmd = [ThicknessViewApp, input_filename, "-o", output_filepath_stem] + args
             print(" ".join(cmd))
         else:
-            cmd = [ThicknessViewApp, input_filename, "-o", output_filepath_stem]
+            cmd = [ThicknessViewApp, input_filename, "-o", output_filepath_stem] + args
     else:   # multi view 
         cmd = [MultiViewApp, input_filename]
 
@@ -149,11 +150,11 @@ def _process_input_file(input_file_path, output_file_path):
     cwd = os.path.abspath(os.path.dirname(output_file_path))
     if generatingMultiViewImage:
         generate_view_images(input_file, False, cwd)
-        if len(glob.glob(output_stem + "*.png")) != 3:  # todo:  nview, 
+        if len(glob.glob(output_stem + "*.png")) < view_count:
             return False
     if generatingThicknessViewImage:
         generate_view_images(input_file, True, cwd, info)
-        if len(glob.glob(output_stem + "*.csv")) != 3:
+        if len(glob.glob(output_stem + "*.csv")) < view_count:
             return False
     return True
 

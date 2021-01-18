@@ -6,13 +6,21 @@ import subprocess
 import shutil
 import glob
 
+testing = False   # for debugging purpose
+usingMixedInputModel = True  # False: if use only image input 
+
 generatingThicknessViewImage = True # also generate meta data for CAD geometry like step file
-generatingMultiViewImage = not generatingThicknessViewImage 
+channel_count = 3 if generatingThicknessViewImage else 1
+usingOnlyThicknessChannel = True
+channel_count = 1 if usingOnlyThicknessChannel else channel_count
+
+generatingMultiViewImage = not generatingThicknessViewImage
+usingGrayscaleImage = not generatingThicknessViewImage
 # also generate meta data for CAD geometry like step file
 
 #datasetName = "Thingi10K"       # all data in one folder
-#datasetName =  "ModelNet" not usable dataset !
-datasetName = "fclib"    
+datasetName =  "ModelNet"       # 
+#datasetName = "fclib"    
 
 metadata_suffix = "json"
 hasPerfileMetadata  = False  #  detected by replace input file suffix to json and test existence
@@ -22,11 +30,7 @@ if datasetName == "Thingi10K":
 
     isMeshFile = True    # choose between  part and mesh input format
     hasPerfileMetadata  = True
-    supported_input_file_suffices = set(["off", "stl"])  #  freecad/meshio support a few mesh format, off
-    input_file_suffix = "stl"
-    # stl is the format needed for view generator, no need for conversion
 
-    testing = False   # for debugging purpose
     ##############################
     if testing:
         root_path = "./testdata/testThingi10K_data"
@@ -65,23 +69,24 @@ if datasetName == "Thingi10K":
     ###########################
 elif datasetName == "ModelNet":
     isMeshFile = True    # choose between  part and mesh input format
-    # off file is not manifold, cause error in thickness view generation
+    # off mesh file is not manifold, cause error in thickness view generation
     hasPerfileMetadata  = False  # where is the metadata like tag and c
 
-    testing = True   # for debugging purpose
     ##############################
     if testing:
-        root_path = "./testdata/testmesh_data"
-        output_root_path = "./testdata/testmesh_output"
-        dataset_metadata_filename =  output_root_path + os.path.sep + "testmesh_data.json"
+        root_path = "./testdata/testModelNet_data"
+        output_root_path = "./testdata/testModelNet_output"
+        dataset_metadata_filename = "testModelNet_dataset.json"
     else:
-        output_root_path = "/opt/ModelNet10_output"
         root_path = "/mnt/windata/MyData/ModelNet10"
-        dataset_metadata_filename = "ModelNet10_data.json"
+        output_root_path = "/opt/ModelNet10_output"
+        dataset_metadata_filename = "ModelNet10_dataset.json"
 
-else:
+elif datasetName == "fclib":
     from fclib_parameters import *
     isMeshFile = False
+else:
+    print(datasetName, "dataset not supported, check spelling")
 
 if generatingThicknessViewImage:
     output_root_path = output_root_path + "_thickness"
@@ -90,6 +95,10 @@ if generatingThicknessViewImage:
 # preprocessing  meshlib meshed part dataset_metadata_filename
 ##########################
 if isMeshFile:
+    supported_input_file_suffices = set(["off", "stl"])  #  freecad/meshio support a few mesh format, off
+    input_file_suffix = "stl"
+    # stl is the only format needed for view generator
+
     # freecad output stl can not been read by occt, but we need freecad to calc bbox ,etc 
     import fcMeshPreprocessor  
     # return a dict of bbox, area, volume,
@@ -103,8 +112,7 @@ if isMeshFile:
     # meshio, MeshLab  can also convert mesh from .off to .stl
     def convert(input, output):
         cmd = ["meshio-convert", input, output]
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, 
-                                                    stderr=subprocess.PIPE)
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, error = p.communicate()
         print(out, error)
 
@@ -129,17 +137,18 @@ view_count = 3
 ############## image preprocessing ############
 binarizingImage = not generatingThicknessViewImage
 compressingImage = False and binarizingImage
-concatingImage = True
+concatingImage = True # do not concat, so image can be flipped
+
 ## image pixel size has been hardcoded into view image generator apps
 if generatingThicknessViewImage:
-    im_width, im_height = 64, 64   # before padding
-    IM_WIDTH, IM_HEIGHT = 64, 64   # after padding
+    normalizingImage = True
+    im_width, im_height = 64, 64   # generated
+    IM_WIDTH, IM_HEIGHT = 32, 32   # after padding, for input into tensorflow
 else:
     if datasetName == "Thingi10K":
         im_width, im_height = 60, 60   # before padding
         #final image size to be learned by AI
         IM_WIDTH, IM_HEIGHT = 64, 64
- 
     else:
         im_width, im_height = 120, 120   # before padding
         # final image size to be learned by AI
@@ -151,16 +160,18 @@ else:
 
 paddingImage = (IM_WIDTH > im_width) or (IM_HEIGHT > im_height)
 if compressingImage:
-    result_shape = (IM_WIDTH//block_size, IM_HEIGHT//block_size, view_count)
+    result_shape = (IM_HEIGHT//block_size, IM_WIDTH//block_size,  view_count)
 else:
-    result_shape = (IM_WIDTH, IM_HEIGHT, view_count)
+    result_shape = (IM_HEIGHT, IM_WIDTH, view_count)  # Y axis as the first index in matrix data
 
 ## concat
 if concatingImage:
-    result_shape = result_shape[0], result_shape[1]*view_count, 1
+    result_shape = [result_shape[0], result_shape[1]*view_count, channel_count]
 else:
-    result_shape = result_shape[0], result_shape[1], view_count
+    result_shape = [view_count, result_shape[0], result_shape[1], channel_count]
 
+# if channel_count > 1:
+#     result_shape.append(channel_count)
 ########### output control #########
 if testing:
     if os.path.exists(output_root_path):
@@ -178,4 +189,16 @@ else:
     processed_imagedata_filename = output_root_path + os.path.sep + "processed_imagedata.npy"
 
 ## saved model file to continue model fit
-saved_model_file = output_root_path + os.path.sep + "tf_model_saved"
+_saved_model_file = "model_saved"
+if usingMixedInputModel:
+    _saved_model_file = "mixed_input_" +  _saved_model_file
+
+if generatingMultiViewImage:
+    _saved_model_file = "multiview_" +  _saved_model_file
+else:
+    if usingOnlyThicknessChannel:
+        _saved_model_file = "thickness_" +  _saved_model_file
+    else:
+        _saved_model_file = "3ch_" +  _saved_model_file
+
+saved_model_file = output_root_path + os.path.sep + _saved_model_file

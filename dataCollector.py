@@ -22,25 +22,36 @@ dataset = []
 imagelist = []
 
 if generatingThicknessViewImage:
-    image_suffices = ["_XY.csv", "_YZ.csv", "_ZX.csv"]
+    #image_suffices = ["_XY.csv", "_YZ.csv", "_ZX.csv"]  # thickness only
+    image_suffices = ["_XY.png", "_YZ.png", "_ZX.png"]
 else:
     image_suffices = ["_0.png", "_1.png", "_2.png"]
 
+
 def process_image(image_stem, image_suffices, metadata):
-    if True:
-        ims = collectImages(image_stem, image_suffices)  # it is quick enough
-        if isinstance(ims, (np.ndarray, np.generic)):
-            imagelist.append(ims)
-            dataset.append(metadata)  # image collection may fail
-    else:
-        try:
-            ims = collectImages(image_stem, image_suffices)  # it is quick enough
-            if isinstance(ims, (np.ndarray, np.generic)):
-                imagelist.append(ims)
-                dataset.append(metadata)  # image collection may fail
-        except Exception as e:
-            print(e)
-            print("error in processing image", image_stem)
+
+    ims = collectImages(image_stem, image_suffices)  # it is quick enough
+
+    # merge into a 2-channel image, must not do padding
+    #dist_name = "_nearest"
+    # dist_suffices = [dist_name + s for s in image_suffices]
+    # if all([os.path.exists(image_stem+s) for s in dist_suffices]):
+    #     assert not paddingImage
+    #     dist_ims = collectImages(image_stem, dist_suffices)
+    #     ims = np.dstack((ims, dist_ims))
+
+    if isinstance(ims, (np.ndarray, np.generic)):
+        imagelist.append(ims)
+        dataset.append(metadata)  # image collection may fail
+
+    # try:
+    #     ims = collectImages(image_stem, image_suffices)  # it is quick enough
+    #     if isinstance(ims, (np.ndarray, np.generic)):
+    #         imagelist.append(ims)
+    #         dataset.append(metadata)  # image collection may fail
+    # except Exception as e:
+    #     print(e)
+    #     print("error in processing image", image_stem)
 
 if datasetName == "Thingi10K":
     CATEGORY_LABEL="Category"
@@ -63,7 +74,7 @@ if datasetName == "Thingi10K":
             print("Can not find all view image files for the input ", image_stem)
 
 
-else:  # FreeCADLib
+else:  # FreeCADLib,  or  ModelNet
     CATEGORY_LABEL="category"
     FILENAME_LABEL="filename"
     columns = ["filename", "category", "subcategories", "path"]
@@ -71,9 +82,15 @@ else:  # FreeCADLib
     def process_entry(entry):
         filename = entry["filename"]
         category = entry["category"]
-        if splittingFastenerCategory and category == "Fasteners":
-            entry["category"] = entry["subcategories"][0]
-        #"subcategories"
+
+        if datasetName == "fclib":
+            #del  metadata["center"]
+            if splittingFastenerCategory and category == "Fasteners":
+                entry["category"] = entry["subcategories"][0]
+            # tmp hack
+            metafolder = "/mnt/windata/MyData/freecad_library_output" + os.path.sep + entry["path"]
+        else:
+            metafolder = output_root_path + os.path.sep + entry["path"]
         filefolder = output_root_path + os.path.sep + entry["path"]
         assert os.path.exists(filefolder)
         input_file_stem = filename[:filename.rfind('.')]                
@@ -82,14 +99,13 @@ else:  # FreeCADLib
         image_stem = filefolder + os.path.sep + input_file_stem
         all_image_found = all([os.path.exists(image_stem + s) for s in image_suffices])
 
-        # tmp hack
-        #metafolder = "/mnt/windata/MyData/freecad_library_output" + os.path.sep + entry["path"]
+
         metadata_filename = glob.glob(metafolder + os.path.sep + input_file_stem + "*"+ metadata_suffix)
         if metadata_filename and all_image_found:
             f=open(metadata_filename[0], "r")
             metadata = json.loads(f.read())
             metadata["filename"] = filename
-            del  metadata["center"]
+
             metadata["category"] = entry["category"]
             metadata["subcategories"] = entry["subcategories"]
 
@@ -133,4 +149,6 @@ if __name__ == "__main__":
         dataframe.to_json(processed_metadata_filepath)
     #save images to binary format, for quicker loading
     np.save(processed_imagedata_filename, np.stack(imagelist))
+    print("processed_metadata_filepath = ", processed_metadata_filepath)
+    print("save processed image file as ", processed_imagedata_filename)
 
