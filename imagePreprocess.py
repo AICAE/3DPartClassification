@@ -36,13 +36,15 @@ def collectImages(filename_stem, suffices):
     for i, f in enumerate(filenames):
         if f.endswith(".png"):
             if usingGrayscaleImage:
-                img = cv2.imread(f, 0)     # Load an color image in grayscale
+                img = cv2.imread(f, 0)     # Load only  the first channel of color image as grayscale
             else:
                 img = cv2.imread(f)  # color/ multiple channel
                 if usingOnlyThicknessChannel:
                     img = img[:, :, 1]  # choose only the thickness channel
-            if img.shape != (im_width, im_height):
-                img = cv2.resize(img,(im_width, im_height))
+                else:
+                    img = img[:, :, :channel_count]  # choose the depth and thickness channels
+            if img.shape[0] > model_input_width and img.shape[1] > model_input_height:   # perhaps, padding is needed if slightly smaller
+                img = cv2.resize(img,(model_input_width, model_input_height))
         elif f.endswith(".csv"):
             im = np.loadtxt(f, delimiter=',')
             if not normalizingImage:
@@ -62,7 +64,7 @@ def collectImages(filename_stem, suffices):
         if paddingImage:
             # 3 view images should have the same padding offset?
             #print("before padding: ", img.shape)
-            img = padImage(img, (IM_WIDTH, IM_HEIGHT))
+            img = padImage(img, (model_input_width, model_input_height))
 
         if compressingImage:
             img = compressImageCpp(img, block_size=block_size)

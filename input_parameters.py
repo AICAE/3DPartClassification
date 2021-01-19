@@ -10,8 +10,8 @@ testing = False   # for debugging purpose
 usingMixedInputModel = True  # False: if use only image input 
 
 generatingThicknessViewImage = True # also generate meta data for CAD geometry like step file
-channel_count = 3 if generatingThicknessViewImage else 1
 usingOnlyThicknessChannel = True
+channel_count = 2 if generatingThicknessViewImage else 1
 channel_count = 1 if usingOnlyThicknessChannel else channel_count
 
 generatingMultiViewImage = not generatingThicknessViewImage
@@ -137,38 +137,38 @@ view_count = 3
 ############## image preprocessing ############
 binarizingImage = not generatingThicknessViewImage
 compressingImage = False and binarizingImage
-concatingImage = True # do not concat, so image can be flipped
+concatingImage = False # do not concat !!!, so image can be flipped, and have view pooling
 
 ## image pixel size has been hardcoded into view image generator apps
 if generatingThicknessViewImage:
     normalizingImage = True
     im_width, im_height = 64, 64   # generated
-    IM_WIDTH, IM_HEIGHT = 32, 32   # after padding, for input into tensorflow
+    model_input_width, model_input_height = 32, 32   # after padding, for input into tensorflow
 else:
     if datasetName == "Thingi10K":
-        im_width, im_height = 60, 60   # before padding
+        im_width, im_height = 60, 60   # generated, before padding
         #final image size to be learned by AI
-        IM_WIDTH, IM_HEIGHT = 64, 64
+        model_input_width, model_input_height = 64, 64
     else:
         im_width, im_height = 120, 120   # before padding
         # final image size to be learned by AI
-        IM_WIDTH, IM_HEIGHT = 128, 128
+        model_input_width, model_input_height = 128, 128
 
         ## compression  only for some CAD part
         compressingImage = False #  compressed or not compressed, both working
         block_size = 8  # can be 4,  4X4 binary pixels compressed into uint16
 
-paddingImage = (IM_WIDTH > im_width) or (IM_HEIGHT > im_height)
 if compressingImage:
-    result_shape = (IM_HEIGHT//block_size, IM_WIDTH//block_size,  view_count)
+    result_shape = (view_count, model_input_height//block_size, model_input_width//block_size)
 else:
-    result_shape = (IM_HEIGHT, IM_WIDTH, view_count)  # Y axis as the first index in matrix data
+    result_shape = (view_count, model_input_height, model_input_width)  # Y axis as the first index in matrix data
 
+paddingImage = (model_input_width > im_width  and model_input_width < im_width* 1.5) or (model_input_height > im_height)
 ## concat
 if concatingImage:
-    result_shape = [result_shape[0], result_shape[1]*view_count, channel_count]
+    model_input_shape = [model_input_height, model_input_width*view_count, channel_count]
 else:
-    result_shape = [view_count, result_shape[0], result_shape[1], channel_count]
+    model_input_shape = [view_count, model_input_height, model_input_width, channel_count]
 
 # if channel_count > 1:
 #     result_shape.append(channel_count)
@@ -184,9 +184,14 @@ dataset_metadata_filepath = output_root_path + os.path.sep + dataset_metadata_fi
 
 processed_metadata_filepath = output_root_path + os.path.sep + "processed_" + dataset_metadata_filename
 if compressingImage:
-    processed_imagedata_filename = output_root_path + os.path.sep + "compressed_imagedata.npy"
+    _processed_imagedata_filename = "compressed_imagedata.npy"
 else:
-    processed_imagedata_filename = output_root_path + os.path.sep + "processed_imagedata.npy"
+    _processed_imagedata_filename = "processed_imagedata.npy"
+
+if not concatingImage:
+    _processed_imagedata_filename = "nview_" + _processed_imagedata_filename
+
+processed_imagedata_filename = output_root_path + os.path.sep + _processed_imagedata_filename
 
 ## saved model file to continue model fit
 _saved_model_file = "model_saved"

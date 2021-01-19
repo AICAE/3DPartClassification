@@ -2,9 +2,15 @@
 
 """
 
+
+modelnet40_classes = ['airplane','bathtub','bed','bench','bookshelf','bottle','bowl','car','chair',
+                         'cone','cup','curtain','desk','door','dresser','flower_pot','glass_box',
+                         'guitar','keyboard','lamp','laptop','mantel','monitor','night_stand',
+                         'person','piano','plant','radio','range_hood','sink','sofa','stairs',
+                         'stool','table','tent','toilet','tv_stand','vase','wardrobe','xbox']
+
 _is_debug = False
-_using_saved_model = True  # 
-_using_mixed_input = True
+_using_saved_model = False # 
 
 # before import tensorflow
 import logging
@@ -31,7 +37,7 @@ if _is_debug:
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam, SGD
-from tensorflow.keras.layers import Concatenate, Flatten
+
 
 #from tensorflow.feature_column import categorical_column_with_identity
 from sklearn.preprocessing import MinMaxScaler, LabelBinarizer
@@ -50,7 +56,7 @@ from stratify import my_split
 
 #import datasets
 #git clone https://github.com/emanhamed/Houses-dataset
-from tf_model import create_mlp, create_cnn
+from tf_model import TDModel
 
 # construct the argument parser and parse the arguments
 #ap = argparse.ArgumentParser()
@@ -65,7 +71,11 @@ print("[INFO] loading classification data")
 df = pd.read_json(processed_metadata_filepath)
 
 images = np.load(processed_imagedata_filename)  # pickle array of object type: allow_pickle=True
-print("[INFO] loaded images ndarray shape", images.shape)
+print("[INFO] loaded images ndarray shape from file", images.shape)
+if images.shape[-1] > 3  and len(model_input_shape) > len(images.shape)-1  and model_input_shape[-1]==1:  
+    # single channel does not have its dim
+    new_shape = [images.shape[0]] + list(model_input_shape)
+    images = np.reshape(images, new_shape)
 
 # there is no need for reshape, np.stack(imagelist)
 #images = images.reshape((images.shape[0], images.shape[1], images.shape[2], 1))
@@ -82,12 +92,18 @@ else:  # FreeCADLib
     CATEGORY_LABEL="category"
     BBOX_LABEL="obb"
     categories = pd.Series(df["category"], dtype="category")
-    FEATURES_INT = ["solidCount", "faceCount"]
+    if "solidCount" in df.columns and  "faceCount" in df.columns:
+        FEATURES_INT = ["solidCount", "faceCount"]
+    else:
+        FEATURES_INT = []  # mesh input has no such fields
 
 ####################################
 # generate a few new columns based on oriented boundbox, a few ratios
 #print(df.head())
-bbox = np.stack(df[BBOX_LABEL].to_numpy())
+try:
+    bbox = np.stack(df[BBOX_LABEL].to_numpy())
+except:
+    bbox = np.stack(df['bbox'].to_numpy())
 
 obb = np.zeros((bbox.shape[0], 3))
 if bbox.shape[1] == 6:
@@ -196,8 +212,8 @@ total_classes = trainY.shape[1]
 # why the array `testY` 's shape is [itemsize, 3]
 # WARN: group size is too small to split, skip this group
 
+print("[INFO] trainY shape by one-hot encoding ", trainY.shape)
 if _is_debug:
-    print("trainY with one-hot encoding ", trainY.shape, trainY)
     print("testY with one-hot encoding ", testY.shape, testY)
 
 from tensorflow.keras.utils import to_categorical
@@ -213,55 +229,76 @@ if _using_saved_model and os.path.exists(saved_model_file):
     print("[INFO] load previously saved model file: ", saved_model_file)
     model = tensorflow.keras.models.load_model(saved_model_file)
 else:
-    print("[INFO] image shape, and images shape", result_shape, imageShape)
-    # from (16, 48, 1) to (1920, 16, 48)
-    #assert result_shape[0]  == imageShape[0]
-    cnn = create_cnn(*result_shape,  regress=False)  # single sample image input here
+    print("[INFO] model input image shape, and images shape", model_input_shape, imageShape)
+    model_settings = { "total_classes": total_classes, "usingMixedInputs": True,
+                        "regress": False}
 
-    # create the MLP and CNN  models, number of columns
-    if _using_mixed_input:
-        print("[INFO] build multiple parameters data frame shape", trainAttrX.shape)
-        mlp = create_mlp(trainAttrX.shape[1], regress=False)
-
-        # create the input to our final set of layers as the *output* of both
-        # the MLP and CNN
-        # Flatten()()
-        combinedInput = Concatenate(axis=1)([mlp.output, cnn.output])
-
-        # our final FC layer head will have two dense layers, 
-        # the final one being our regression head
-        x = Dense(4, activation="relu")(combinedInput)  # todo: how to decide the first param? 
-        x = Dense(total_classes, activation="softmax")(x) 
-        # https://www.analyticsvidhya.com/blog/2019/08/detailed-guide-7-loss-functions-machine-learning-python-code/
-        # "softmax", "sigmoid" make no diff, is needed for multiple label classification
-
-        # our final  will accept categorical/numerical data on the MLP
-        # input and images on the CNN input, outputting a single value (the
-        # predicted price of the house)
-        model = Model(inputs=[mlp.input, cnn.input], outputs=x)
-    else:
-        model = cnn
-
+    model = TDModel(model_settings).create_model(im_shape = model_input_shape, mlp_shape = trainAttrX.shape)
     #########################################
-    opt = Adam(lr=1e-5, decay=1e-5 / 200)  # lr: learning rate from 1e-3
+    opt = Adam(lr=1e-4, beta_1=0.7, decay=1e-5 / 200)  # lr: learning rate from 1e-3 decrease to -5
     # the loss functions depends on the problem itself, for multiple classification 
     model.compile(loss="categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
     # sparse_categorical_crossentropy
 
+# is that possible to set some model parameters after load, YES
+# https://www.tensorflow.org/api_docs/python/tf/keras/callbacks/LearningRateScheduler
+from tensorflow.keras import backend as K
+K.set_value(model.optimizer.learning_rate, 0.00001)
+print("Learning rate before second fit:", model.optimizer.learning_rate.numpy())
+
+## auto checkpoint save?
+# keras.callbacks.ModelCheckpoint
+checkpoint_filepath = '/tmp/tf_checkpoint'
+model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+    filepath=checkpoint_filepath,
+    save_weights_only=True,
+    monitor='val_accuracy',
+    mode='max',
+    save_best_only=True)
+
+import signal
+def keyboardInterruptHandler(signal, frame):
+    print("KeyboardInterrupt (ID: {}) has been caught. Cleaning up...".format(signal))
+    # if save model, it that a reloadable model?  
+    exit(0)
+signal.signal(signal.SIGINT, keyboardInterruptHandler)
+
 # init the weight values
 # train the model
 print("[INFO] training part recognition...")
-model.fit(
+
+
+history = model.fit(
     [trainAttrX, trainImagesX], trainY,
     validation_data=([testAttrX, testImagesX], testY),  # test does not have all classes
-    #validation_data=([trainAttrX, trainImagesX], trainY),  #tmp bypass error
-    epochs=25, batch_size=20)
-
+    #callbacks=[model_checkpoint_callback],
+    epochs=250, batch_size=100)
 
 #####################################
 # save the model and carry on model fit in a second run
 # https://www.tensorflow.org/guide/keras/save_and_serialize
 model.save(saved_model_file)
+
+# show trainable parameter count
+model.summary()
+
+# using history can plot val_accurary (validation accurary)
+import matplotlib.pyplot as plt
+plt.plot(history.history['accuracy'], label='accuracy')
+plt.plot(history.history['val_accuracy'], label = 'val_accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.ylim([0.5, 1])
+plt.legend(loc='lower right')
+
+# convert the history.history dict to a pandas DataFrame:
+import pandas as pd 
+hist_df = pd.DataFrame(history.history) 
+
+# save to json:  
+hist_json_file = saved_model_file + '.json' 
+with open(hist_json_file, mode='w') as f:
+    hist_df.to_json(f)
 
 ########################################
 # make predictions on the testing data
@@ -277,14 +314,3 @@ absPercentDiff = np.abs(percentDiff)
 print("[INFO] validate prediction by test data, error percentage is: ", absPercentDiff)
 
 #########################################
-
-total_parameters = 0
-for variable in tf.compat.v1.trainable_variables():
-    # shape is an array of tf.Dimension
-    shape = variable.get_shape()
-    variable_parameters = 1
-    for dim in shape:
-        variable_parameters *= dim.value
-    print(variable, variable_parameters)
-    total_parameters += variable_parameters
-print("total trainable parameter count = ", total_parameters)

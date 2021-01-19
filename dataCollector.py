@@ -151,4 +151,5 @@ if __name__ == "__main__":
     np.save(processed_imagedata_filename, np.stack(imagelist))
     print("processed_metadata_filepath = ", processed_metadata_filepath)
     print("save processed image file as ", processed_imagedata_filename)
+    print("single processed image shape ", imagelist[0].shape)
 
