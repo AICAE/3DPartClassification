@@ -54,8 +54,7 @@ import json
 from input_parameters import *
 from stratify import my_split
 
-#import datasets
-#git clone https://github.com/emanhamed/Houses-dataset
+
 from tf_model import TDModel
 
 # construct the argument parser and parse the arguments
@@ -65,9 +64,7 @@ from tf_model import TDModel
 #args = vars(ap.parse_args())
 
 ##################################
-# construct the path to the input .txt file that contains information
-# on each house in the dataset and then load the dataset
-print("[INFO] loading classification data")
+print("[INFO] loading classification data in metadata file")
 df = pd.read_json(processed_metadata_filepath)
 
 images = np.load(processed_imagedata_filename)  # pickle array of object type: allow_pickle=True
@@ -77,8 +74,6 @@ if images.shape[-1] > 3  and len(model_input_shape) > len(images.shape)-1  and m
     new_shape = [images.shape[0]] + list(model_input_shape)
     images = np.reshape(images, new_shape)
 
-# there is no need for reshape, np.stack(imagelist)
-#images = images.reshape((images.shape[0], images.shape[1], images.shape[2], 1))
 
 if datasetName == "Thingi10K":
     CATEGORY_LABEL="Category"  # "Category" is too coarse to classify
@@ -227,10 +222,12 @@ testAttrX = pd.DataFrame(testDataset, columns = FEATURES)
 ##########################################
 if _using_saved_model and os.path.exists(saved_model_file):
     print("[INFO] load previously saved model file: ", saved_model_file)
+
     model = tensorflow.keras.models.load_model(saved_model_file)
+    model_loaded = True
 else:
     print("[INFO] model input image shape, and images shape", model_input_shape, imageShape)
-    model_settings = { "total_classes": total_classes, "usingMixedInputs": True,
+    model_settings = { "total_classes": total_classes, "usingMixedInputs": usingMixedInputModel,
                         "regress": False}
 
     model = TDModel(model_settings).create_model(im_shape = model_input_shape, mlp_shape = trainAttrX.shape)
@@ -266,13 +263,18 @@ signal.signal(signal.SIGINT, keyboardInterruptHandler)
 # init the weight values
 # train the model
 print("[INFO] training part recognition...")
+callbacks=[model_checkpoint_callback]
 
-
-history = model.fit(
-    [trainAttrX, trainImagesX], trainY,
-    validation_data=([testAttrX, testImagesX], testY),  # test does not have all classes
-    #callbacks=[model_checkpoint_callback],
-    epochs=250, batch_size=100)
+if usingMixedInputModel:
+    history = model.fit(
+        [trainAttrX, trainImagesX], trainY,
+        validation_data=([testAttrX, testImagesX], testY),  # test does not have all classes
+        epochs=250, batch_size=1000)
+else:
+    history = model.fit(
+        trainImagesX, trainY,
+        validation_data=(testImagesX, testY),  # test does not have all classes
+        epochs=250, batch_size=1000) 
 
 #####################################
 # save the model and carry on model fit in a second run
@@ -280,7 +282,8 @@ history = model.fit(
 model.save(saved_model_file)
 
 # show trainable parameter count
-model.summary()
+if _is_debug:
+    model.summary()
 
 # using history can plot val_accurary (validation accurary)
 import matplotlib.pyplot as plt
@@ -290,6 +293,8 @@ plt.xlabel('Epoch')
 plt.ylabel('Accuracy')
 plt.ylim([0.5, 1])
 plt.legend(loc='lower right')
+if _is_debug:
+    plt.show()
 
 # convert the history.history dict to a pandas DataFrame:
 import pandas as pd 
@@ -302,7 +307,10 @@ with open(hist_json_file, mode='w') as f:
 
 ########################################
 # make predictions on the testing data
-preds = model.predict([testAttrX, testImagesX])
+if usingMixedInputModel:
+    preds = model.predict([testAttrX, testImagesX])
+else:
+    preds = model.predict(testImagesX)
 
 # compute the difference between the *predicted*  and the *actual*  
 # # then compute the percentage difference 

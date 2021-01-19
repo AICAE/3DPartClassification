@@ -48,6 +48,7 @@ class TDModel(object):
         self.total_classes = s["total_classes"]
         self.OUT_NODE_COUNT = self.total_classes
         self.usingMixedInputs = s["usingMixedInputs"]
+        self.usingMaxViewPooling = False
         self.regress=s["regress"]
 
     def create_mlp(self, dim):
@@ -55,7 +56,7 @@ class TDModel(object):
         # if tensorflow.feature_column is used as input, 
         # then the first layer must be DenseFeatures
         model = Sequential()
-        model.add(Dense(8, input_dim=dim, activation="relu"))
+        model.add(Dense(8, input_dim=dim, activation="relu"))  # todo: why units = 8 ???
         model.add(Dense(self.OUT_NODE_COUNT, activation="relu"))
 
         # check to see if the regression node should be added
@@ -68,7 +69,12 @@ class TDModel(object):
         # concat and max_pool
         #output = tf.keras.layers.Concatenate(view_pool, axis=0)
         #return  tf.keras.layers.Maximum(axis=0)(output)
-        return  tf.keras.layers.Maximum()(view_pool)
+        if self.usingMaxViewPooling:
+            return  tf.keras.layers.Maximum()(view_pool)
+        else:
+            x = Concatenate(axis=1)(view_pool)
+            print("concat shape after view pool is ", x.shape)
+            return x
 
 
     def create_cnn(self, inputShape, filters=(8, 16, 32), data_augmentation=False):
@@ -138,6 +144,9 @@ class TDModel(object):
         # apply another FC layer, this one to match the number of nodes
         x = Dense(self.OUT_NODE_COUNT)(x)
         x = Activation("relu")(x)
+
+        if not self.usingMixedInputs:
+            x = Dense(self.total_classes, activation="softmax")(x)
 
         # check to see if the regression node should be added
         if self.regress:
