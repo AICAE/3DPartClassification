@@ -54,7 +54,7 @@ def compressImageBlock(im, block_size=8):
     #print("pbuf: ", pbuf[:16])
 
     h, w = im.shape[0]//block_size, im.shape[1]//block_size
-    arr = cppyy.gbl.compressBlock(pbuf, im.shape) # .reshape((h*w,))
+    arr = cppyy.gbl.compressImage(pbuf, im.shape) # .reshape((h*w,))
     #print(type(arr))
     cim = np.frombuffer(arr, dtype=np.uint64, count=h*w)  # count is not needed once reshape() is called
     cim = np.reshape(cim, (h, w))  #  cim = cim.reshape()
@@ -62,13 +62,7 @@ def compressImageBlock(im, block_size=8):
     return cim
 
 
-def compressImage(im, block_size=8, normalizing=False):
-    """
-    binary image should be multiple of 8, padding with zero or resize before call this
-    compress a block_size X block_size block into a pixel of unsigned integer
-    pure python implementation, slow, served as unit test for C version
-    """
-    height, width = im.shape
+def checkImageShape(block_size):
     if block_size==4:
         dtype = np.uint16
         middle = 2**16/2.0
@@ -77,6 +71,18 @@ def compressImage(im, block_size=8, normalizing=False):
         middle = 2**63*1.0
     else:
         raise Exception("block size must be 4 or 8")
+    return dtype, middle
+
+def compressImagePy(im, block_size=8, normalizing=False):
+    """
+    Pure python impl, to validate C++ impl
+    binary image should be multiple of 8, padding with zero or resize before call this
+    compress a block_size X block_size block into a pixel of unsigned integer
+    pure python implementation, slow, served as unit test for C version
+    """
+    height, width = im.shape
+
+    dtype, middle = checkImageShape(block_size)
 
     if normalizing:
         result_dtype = np.float64
@@ -93,8 +99,7 @@ def compressImage(im, block_size=8, normalizing=False):
             slice = im[y*block_size: (y+1)*block_size, x*block_size: (x+1)*block_size]
             bindata = np.zeros((block_size, block_size), dtype=np.uint8)
             bindata[slice>lightThreshold]= 1
-            data = np.packbits(bindata)
-            # todo: byte order !!!!!!!!!!!!!!!!!!!!!
+            data = np.packbits(bindata, bitorder="little")  # byte order !!!!!!!!!!!!!!!!!!!!!
             a = np.frombuffer(data.tobytes(), dtype=dtype)  # result is a 1D array
             if normalizing:
                 cim[y, x] =  (a[0] - middle)/middle # normalized into [-1, 1)
@@ -121,23 +126,24 @@ def test():
     a = np.array([[1,0,0,0], [0,0,0,0], [0,0,0,1], [0,0,0,0]])
     #print(a.shape)
     d = np.packbits(a)
-    assert(d[0] == 128  and d[1] == 16)
+    assert(d[0] == 128  and d[1] == 16)  # bitorder by default is `big` more human readable
 
     testCppyy()
 
     im=np.array([[0, 0, 0, 0, 0, 0, 0, 1],
-                             [0, 0, 0, 0, 0, 0, 1, 0],
-                             [0, 0, 0, 0, 0, 1, 0, 0],
-                             [0, 0, 0, 0, 1, 0, 0, 0],
-                             [0, 0, 0, 1, 0, 0, 0, 1],
-                             [0, 0, 1, 0, 0, 0, 1, 0],
-                             [0, 1, 0, 0, 0, 1, 0, 0],
-                             [1, 0, 0, 0, 1, 0, 0, 0]], dtype=np.uint8)
+                [0, 0, 0, 0, 0, 0, 1, 0],
+                [0, 0, 0, 0, 0, 1, 0, 0],
+                [0, 0, 0, 0, 1, 0, 0, 0],
+                [0, 0, 0, 1, 0, 0, 0, 1],
+                [0, 0, 1, 0, 0, 0, 1, 0],
+                [0, 1, 0, 0, 0, 1, 0, 0],
+                [1, 0, 0, 0, 1, 0, 0, 0]], dtype=np.uint8)
     im = im*128
     # todo: endianess is different
-    cim1=compressImage(im.copy())
+    cim1 = compressImagePy(im.copy())
     cim2 = compressImageBlock(im)
     print(hex(cim1[0][0]), hex(cim2[0][0]))
+    assert hex(cim1[0][0]) == hex(cim2[0][0])
 
 if __name__ == "__main__":
     test()
