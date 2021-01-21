@@ -8,14 +8,16 @@ typedef Eigen::MatrixXf Image;
 const std::vector<std::string> PNAMES = {"_XY", "_YZ", "_ZX"};  // rolling
 const std::vector<std::string> TRINAMES = {"_TRI_XY", "_TRI_YZ", "_TRI_ZX"}; 
 
+#define DUMP_BOP_INTERSECTED_EDGES 0
+#define DUMP_BOP_GRID 0
 #define USE_OPENCV 1
+
 #if USE_OPENCV
 // OpenImageIO can be another choice
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 const std::string IM_SUFFIX = ".png";
 #else
-
 const std::string IM_SUFFIX = ".csv";
 #endif
 
@@ -96,13 +98,17 @@ std::set<std::pair<size_t, size_t>> calc_thickness(const IntersectionMat& mat, I
                 im(r, c) = std::abs((*p)[0] - (*p)[1]);
             else
             {
-                // sorted then get the diff for every 2 
+                // sorted then get the diff for every pair
                 std::vector<double> v(*p);
-                std::sort(v.begin(), v.end());
+                //std::sort(v.begin(), v.end());  // has sorted before get here
                 double t = 0.0;
-                for(size_t i = 0; i<n%2; i++ )
+                for(size_t i = 0; i<n/2; i++)
                 {
-                    t +=  v[i*2+1] - v[i*2+1];
+                    t +=  v[i*2+1] - v[i*2];
+                    if (v[i*2+1] - v[i*2] < 0)  // should not happen if all sorted
+                    {
+                        std::cout << "Error: intersection height vector is not sorted!\n";
+                    }
                 }
                 im(r, c) = std::abs(t);
             }
@@ -183,11 +189,11 @@ void save_data(IntersectionData& data, const std::string& output_file_stem,
 
         Image im(mat.rows(), mat.cols());
         auto error_pos = calc_thickness(mat, im);
-        double threshold = 0.05;
-        if (std::size(error_pos) > mat.rows() * mat.cols() * threshold)
+        double error_threshold = 0.05;
+        if (std::size(error_pos) > mat.rows() * mat.cols() * error_threshold)
         {
             std::cout << "Error: image will not be saved as total number of odd thickness vector size " << 
-                std::size(error_pos) << " is higher than the threshold percentage " <<  threshold * 100 <<"\n";
+                std::size(error_pos) << " is higher than the threshold percentage " <<  error_threshold * 100 <<"\n";
             continue;
         }
         else
@@ -195,7 +201,7 @@ void save_data(IntersectionData& data, const std::string& output_file_stem,
             if(std::size(error_pos) > 0)
             {
                 std::cout << "Warning: total number of odd thickness vector size " << std::size(error_pos) << 
-                    ",  less than threshold " <<  threshold * 100 << " percentage, will be interpolated\n";
+                    ",  less than threshold " <<  error_threshold * 100 << " percentage, will be interpolated\n";
                 interoplate_thickness(error_pos, im);
             }
             #if USE_OPENCV
@@ -215,7 +221,7 @@ void save_data(IntersectionData& data, const std::string& output_file_stem,
 
 
 /// slow but robust: find the intersection line segments by boolean operation
-double intersect_bop(const TopoDS_Shape& shape, const TopoDS_Edge& edge)
+double intersect_thickness_bop(const TopoDS_Shape& shape, const TopoDS_Edge& edge)
 {
     double t = 0;
 
@@ -239,6 +245,7 @@ double intersect_bop(const TopoDS_Shape& shape, const TopoDS_Edge& edge)
     return t;
 }
 
+#if 0
 /// this BOP method is very slow but precise
 ///  and it uses a grid different from triangulation method
 int bop(std::string input, const std::string& output_file_stem)
@@ -290,13 +297,14 @@ int bop(std::string input, const std::string& output_file_stem)
                 p2.SetCoord(z_index+1, max[z_index]);
 
                 auto e = BRepBuilderAPI_MakeEdge(p1, p2).Edge();
-                im(r, c) = intersect_bop(shape, e);
+                im(r, c) = intersect_thickness_bop(shape, e);
                 cBuilder.Add(merged, e);
             }
         }
 
         save_image(im, output_file_stem + "_BOP" + PNAMES[iaxis] + IM_SUFFIX);
-#ifndef NDEBUG
+#if DUMP_BOP_GRID
+        cBuilder.Add(merged, shape);
         BRepTools::Write(merged, (output_file_stem + PNAMES[iaxis] + "_grid.brep").c_str());
 #endif
     }
@@ -304,9 +312,129 @@ int bop(std::string input, const std::string& output_file_stem)
     return 0;
 }
 
+#endif
+
+/// slow but robust: find the intersection line segments by boolean operation
+std::vector<scalar> intersect_heights_bop(const TopoDS_Shape& shape, const TopoDS_Edge& edge, int iCoord, TopoDS_Shape& eIntersected)
+{
+    BRepAlgoAPI_Common bc{shape, edge};
+    //bc.SetRunParallel(occInternalParallel);
+    // bc.SetFuzzyValue(); tolerance?
+    bc.SetNonDestructive(Standard_True);
+    if (not bc.IsDone())
+    {
+        std::cout << "BRepAlgoAPI_Common is not done\n";
+    }
+
+    std::vector<scalar> res; // output is limited to Solid shape type
+    eIntersected = bc.Shape();
+    for (TopExp_Explorer anExp(eIntersected, TopAbs_EDGE); anExp.More(); anExp.Next())
+    {
+        const auto ed = anExp.Current();
+        std::vector<scalar> h; 
+
+        // ed.Oriented(TopAbs_FORWARD)
+        for(TopExp_Explorer exEdge(ed, TopAbs_VERTEX); exEdge.More(); exEdge.Next())
+        {
+            auto curV = TopoDS::Vertex(exEdge.Current());
+            auto p = BRep_Tool::Pnt(curV);
+            h.push_back(p.Coord(iCoord));
+        }
+        assert(h.size() > 0 && h.size() == 2);
+        if (h.size() == 1)
+        {
+            std::cout << "the edge has one vertex, error?: \n";
+            // for (auto v: res)
+            //     std::cout << v << ", ";
+            // std::cout << std::endl;
+        }
+        else
+        {
+            res.push_back(*std::min_element(h.cbegin(), h.cend()));
+            res.push_back(*std::max_element(h.cbegin(), h.cend()));
+            if (h.size() % 2 == 1  || h.size() > 2)
+            {
+                std::cout << "the edge has more than 2 vertex \n";
+            }
+        }
+    }
+
+    return res;
+}
+
+/// grid has been valid by show grid lines and the shape
+void calc_thickness_bop(const TopoDS_Shape& shape, const GridInfo& gInfo, IntersectionData& data)
+{
+    /*
+    double min[DIM], max[DIM], space[DIM];
+    for (size_t i=0; i< DIM; i++)
+    {
+        #if 1  // to give margin
+        space[i] = (max[i] - min[i])/(NGRIDS[i]-2);
+        min[i] -= space[i];
+        #else
+        space[i] = (max[i] - min[i])/(NGRIDS[i]);
+        #endif
+    }
+    */
+
+    for(int iaxis = 0; iaxis < 3; iaxis++)
+    {
+        IntersectionMat& mat = *data[iaxis];
+        size_t r_index = iaxis;
+        size_t c_index = (1 + iaxis)%3;
+        size_t z_index = (iaxis + 2)%3;
+        //gp_Vec dir(0, 0, 0);
+        //dir.SetCoord(z_index + 1, 1.0);
+#if DUMP_BOP_INTERSECTED_EDGES
+        TopoDS_Builder cBuilder1;
+        TopoDS_Compound merged1;
+        cBuilder1.MakeCompound(merged1);
+#endif
+        TopoDS_Builder cBuilder;
+        TopoDS_Compound merged;
+        cBuilder.MakeCompound(merged);
+        scalar zStart = gInfo.starts[z_index] + gInfo.spaces[z_index] * -1;
+        scalar zEnd = gInfo.starts[z_index] + gInfo.spaces[z_index] * ( gInfo.nsteps[z_index] + 1);
+
+        for (size_t r=0; r< mat.rows(); r++)
+        {
+            double r_value = gInfo.starts[r_index] + gInfo.spaces[r_index] * r;
+            for (size_t c=0; c< mat.cols(); c++)
+            {
+                double c_value = gInfo.starts[c_index] + gInfo.spaces[c_index] * c;
+                // create the curve, then surface, IntCS
+                gp_Pnt p1; 
+                p1.SetCoord(r_index+1, r_value);
+                p1.SetCoord(c_index+1, c_value); 
+                p1.SetCoord(z_index+1, zStart);
+                gp_Pnt p2 = p1;
+                p2.SetCoord(z_index+1, zEnd);
+
+                auto e = BRepBuilderAPI_MakeEdge(p1, p2).Edge();
+                TopoDS_Shape e1;
+                auto v = intersect_heights_bop(shape, e, z_index+1, e1);
+                mat(r, c) = std::make_shared<std::vector<scalar>>(std::move(v));
+                cBuilder.Add(merged, e);
+
+                #if DUMP_BOP_INTERSECTED_EDGES
+                cBuilder1.Add(merged1, e1);
+                #endif
+            }
+        }
+
+        #if DUMP_BOP_INTERSECTED_EDGES
+        BRepTools::Write(merged1, ("debug_bop_intersected_" + PNAMES[iaxis] + "_edges.brep").c_str());
+        #endif
+#if DUMP_BOP_GRID
+        cBuilder.Add(merged, shape);
+        BRepTools::Write(merged, ("debug_bop" + PNAMES[iaxis] + "_grid.brep").c_str());
+#endif
+    }
+}
 
 /// triangulation, fast less precise than BOP
-int project(std::string input, const std::string& output_file_stem, bool triview=false)
+int project(std::string input, const std::string& output_file_stem, bool triview=false, bool bop = false)
 {
     Bnd_OBB obb;
     auto shape = prepare_shape(input, obb);
@@ -319,13 +447,21 @@ int project(std::string input, const std::string& output_file_stem, bool triview
 
     IntersectionData data;
     init_intersection_data(data);
-    auto faces = get_free_faces(shape);
-    double linDefl = 0.25; // or 0.1 times of pixel grid space?
-    for(const auto& f: *faces)
+
+    if (bop)
     {
-        mesh.triangles = generate_mesh(f, mesh.local_transform, linDefl);
-        calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
+        calc_thickness_bop(shape, mesh.grid_info, data);
     }
+    else{
+        auto faces = get_free_faces(shape);
+        double linDefl = 0.25; // or 0.1 times of pixel grid space?
+        for(const auto& f: *faces)
+        {
+            mesh.triangles = generate_mesh(f, mesh.local_transform, linDefl);
+            calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
+        }
+    }
+
     // save thickness matrix as numpy array,  scale it?  save as image?
     if (triview)
     {
@@ -441,16 +577,16 @@ int main(int argc, char *argv[]) {
     }
     else
     {
-        if(program.get<bool>("--bop"))
-        {
-            bop(input, output_stem);  // working but extremely slow, can be used to compare speed
-        }
-        else
-        {
-            project(input, output_stem);
-            if (USE_TRIVIEW)
-                project(input, output_stem, USE_TRIVIEW);
-        }
+        project(input, output_stem, program.get<bool>("--xyz"), program.get<bool>("--bop"));
+        // if(program.get<bool>("--bop"))
+        // {
+        //     //bop(input, output_stem);  // working but extremely slow, can be used to compare speed
+        //     project(input, output_stem, false, program.get<bool>("--bop"));
+        // }
+        // else
+        // {
+        //     project(input, output_stem);   
+        // }
     }
     
     return 0;

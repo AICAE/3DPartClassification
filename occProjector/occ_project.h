@@ -107,6 +107,8 @@ struct GridInfo
     std::array<double, DIM> starts; // 
     std::array<double, DIM> spaces;
     std::array<size_t, DIM> nsteps;  // npixels (cells) in each axis
+    std::array<double, DIM> mins; // 
+    std::array<double, DIM> maxs;
 };
 
 struct MeshData
@@ -129,7 +131,8 @@ GridInfo generate_grid(const BoundBoxType bbox)
     std::array<double, DIM> starts = {xmin - spaces[0] * 0.5 * m, 
             ymin - spaces[1] * 0.5 * m, zmin - spaces[2] * 0.5 * m};  // first cell's center
     // {xmin, ymin, zmin}, {xmax, ymax, zmax}, 
-    GridInfo gInfo{starts, spaces, {NGRIDS[0]-1, NGRIDS[1]-1, NGRIDS[1]-1}};  // 
+    GridInfo gInfo{starts, spaces, {NGRIDS[0]-1, NGRIDS[1]-1, NGRIDS[1]-1},
+        {xmin, ymin, zmin}, {xmax, ymax, zmax}};  // 
 
     return gInfo;
 }
