@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 import numpy as np 
 from matplotlib import pyplot as plt
@@ -6,6 +7,8 @@ import glob
 import os.path
 from mpl_toolkits.mplot3d import Axes3D
 
+
+# TODO: grayscale, instead of color, also set figure size to save
 
 #default_input_stem = "data/part.stl"
 default_input_stem = "data/part.brep"
@@ -19,7 +22,7 @@ if not os.path.isabs(default_input_stem) and os.path.exists("occProjector"):
 bop = False
 usingPNG = True
 using3D = False  # very slow
-usingTriView = True
+
 vmin, vmax = 0.0, 1.0
 view_names = ["_XY", "_YZ", "_ZX"]
 
@@ -35,9 +38,6 @@ else:
 
 if bop:
   view_names = ["_BOP" + s for s in view_names]
-if usingTriView:
-  view_names = ["_TRI" + s for s in view_names]
-suffixes = [v + suffix for v in view_names]
 
 
 def read_csv(f):
@@ -48,7 +48,15 @@ def read_csv(f):
     im = im/immax
     return im
 
-def plot_projection_views(outputfile_stem):
+def plot_projection_views(outputfile_stem, usingTriView = False):
+    """
+    """
+    if usingTriView:
+        new_view_names = ["_TRI" + s for s in view_names]
+        suffixes = [v + suffix for v in new_view_names]
+    else:
+        suffixes = [v + suffix for v in view_names]
+
     if using3D:
         fig = plt.figure(figsize=(24, 32))
     else:
@@ -96,3 +104,7 @@ if __name__ == "__main__":
         outputfile_stem = sys.argv[1]
 
     plot_projection_views(outputfile_stem)
+
+    triViewFiles = glob.glob(outputfile_stem + "*_TRI_*")
+    if len(triViewFiles):
+        plot_projection_views(outputfile_stem, True)
