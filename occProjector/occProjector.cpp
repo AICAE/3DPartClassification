@@ -10,7 +10,10 @@ const std::vector<std::string> TRINAMES = {"_TRI_XY", "_TRI_YZ", "_TRI_ZX"};
 
 #define DUMP_BOP_INTERSECTED_EDGES 0
 #define DUMP_BOP_GRID 0
+#define DUMP_PART_MESH 0
 #define USE_OPENCV 1
+
+const double error_threshold = 0.05;  // less than this ratio will be interpolated
 
 #if USE_OPENCV
 // OpenImageIO can be another choice
@@ -22,7 +25,7 @@ const std::string IM_SUFFIX = ".csv";
 #endif
 
 const bool MERGE_3_INTERSECTION = true;  // ModeNet stl mesh has self-intersection faces
-bool USE_TRIVIEW = false;
+bool USE_ISOMETRIC = false;               // currently
 // PCL has a tool `mesh2pcd`: convert a CAD model to a PCD (Point Cloud Data) file, using ray tracing operations.
 
 
@@ -46,7 +49,7 @@ void save_image(const Image& tim, const std::string& filename, const Intersectio
             const auto n = p->size();
             if(n>=2)
             {
-                im.at<cv::Vec3b>(r, c) = {(*p)[0] *255, tim(r,c) * 255, (*p)[n-1] *255};
+                im.at<cv::Vec3b>(r, c) = {(*p)[0] *255, tim(r,c) * 255, (*p)[n-1] *255}; // may overflow
             }
         }
     }
@@ -69,6 +72,36 @@ void calc_nearest(const IntersectionMat& mat, Image& im)
     }
 }
 
+/// filter out values with similar values, input vector must be sorted
+std::vector<scalar> remove_duplicated_values(const std::vector<scalar>& hv)
+{
+    std::vector<scalar> r;
+    const scalar precision = 1e-1;
+
+    r.push_back(hv[0]);
+    for(size_t i=0; i<hv.size()-1; i++)
+    {
+        if (std::abs(hv[i+1] - hv[i]) > precision)
+            r.push_back(hv[i+i]);
+    }
+    return r;
+}
+
+/// input vector must be sorted, and vector size is even number
+scalar calc_thickness(const std::vector<scalar>& v)
+{
+    double t = 0.0;
+    for(size_t i = 0; i<v.size()/2; i++)
+    {
+        t +=  v[i*2+1] - v[i*2];
+        if (v[i*2+1] - v[i*2] < 0)  // should not happen if all sorted
+        {
+            std::cout << "Error: intersection height vector is not sorted!\n";
+        }
+    }
+    return t;
+}
+
 std::set<std::pair<size_t, size_t>> calc_thickness(const IntersectionMat& mat, Image& im)
 {
     std::set<std::pair<size_t, size_t>> error_pos;
@@ -89,28 +122,25 @@ std::set<std::pair<size_t, size_t>> calc_thickness(const IntersectionMat& mat, I
                     im(r, c) = std::abs(max - min); 
                 }
                 else{
-                std::cout << "Error: intersection vector size " << n << " is not an even number " << r << ", " << c <<"\n";
-                im(r, c) = 0.0f;   // set zero, or intoperation later
-                error_pos.insert({r, c});
+                    std::cout << "Error: intersection vector size " << n << " is not an even number " << r << ", " << c <<"\n";
+                    auto fhv = remove_duplicated_values(*p);
+
+                    if (fhv.size() % 2 == 0)
+                    {
+                        std::cout << "Because there is duplicated height values, filtered out and calc thickness \n";
+                        im(r, c) = calc_thickness(fhv);
+                    }
+                    else{
+                        im(r, c) = 0.0f;   // set zero, or intoperation later
+                        error_pos.insert({r, c});
+                    }
                 }
             }
             else if(n==2)
                 im(r, c) = std::abs((*p)[0] - (*p)[1]);
             else
             {
-                // sorted then get the diff for every pair
-                std::vector<double> v(*p);
-                //std::sort(v.begin(), v.end());  // has sorted before get here
-                double t = 0.0;
-                for(size_t i = 0; i<n/2; i++)
-                {
-                    t +=  v[i*2+1] - v[i*2];
-                    if (v[i*2+1] - v[i*2] < 0)  // should not happen if all sorted
-                    {
-                        std::cout << "Error: intersection height vector is not sorted!\n";
-                    }
-                }
-                im(r, c) = std::abs(t);
+                im(r, c) = calc_thickness(*p);
             }
         }
     }
@@ -176,20 +206,21 @@ void test_IndexedMap()
 
 /// find after faceting, 
 void save_data(IntersectionData& data, const std::string& output_file_stem, 
-                const BoundBoxType& bbox, const std::vector<std::string> PNAMES)
+                const GridInfo& gInfo, const std::vector<std::string> PNAMES)
 {
 
     for(int i=0; i<NVIEWS; i++)
     {
         auto& mat = *data[i];
-        std::pair<scalar, scalar> minmax = {bbox[i], bbox[i+DIM]};
+        size_t thickness_i = (i+2)%DIM;
+        std::pair<scalar, scalar> minmax = {gInfo.mins[thickness_i], gInfo.maxs[thickness_i]};
         sort_intersection(mat);
         if(NORMALIZED_THICKNESS)
             normalize_intersection(mat, minmax);
 
         Image im(mat.rows(), mat.cols());
         auto error_pos = calc_thickness(mat, im);
-        double error_threshold = 0.05;
+
         if (std::size(error_pos) > mat.rows() * mat.cols() * error_threshold)
         {
             std::cout << "Error: image will not be saved as total number of odd thickness vector size " << 
@@ -465,22 +496,20 @@ int project(std::string input, const std::string& output_file_stem, bool triview
     // save thickness matrix as numpy array,  scale it?  save as image?
     if (triview)
     {
-        save_data(data, output_file_stem, calcBoundBox(shape), TRINAMES);
+        save_data(data, output_file_stem, mesh.grid_info, TRINAMES);
     }
     else
     {
-        save_data(data, output_file_stem, calcBoundBox(shape), PNAMES); 
+        save_data(data, output_file_stem, mesh.grid_info, PNAMES);
+        writeMetadataFile(shape, output_file_stem + "_metadata.json");
     }
 
 
-//#ifndef NDEBUG
-#if 0
+#if DUMP_PART_MESH
     auto stl_exporter = StlAPI_Writer(); // high level API
     stl_exporter.Write(shape, (input + "_meshed.stl").c_str()); 
     // shape must has mesh for each face
 #endif
-
-    writeMetadataFile(shape, output_file_stem + "_metadata.json");
 
     return 0;
 }
@@ -499,7 +528,7 @@ int project_mesh(std::string input, const std::string& output_file_stem, const B
     calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
 
     // save thickness matrix as numpy array,  scale it?  save as image?
-    save_data(data, output_file_stem, bbox, PNAMES);
+    save_data(data, output_file_stem, mesh.grid_info, PNAMES);
 
     return 0;
 }
@@ -550,7 +579,7 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
 
-    USE_TRIVIEW = program.get<bool>("--xyz");
+    USE_ISOMETRIC  = program.get<bool>("--xyz");
     USE_OBB = program.get<bool>("--obb");  // set global variable
     //if(program.present("--grid"))  // present() must not have a default value
     {
