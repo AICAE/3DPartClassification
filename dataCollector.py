@@ -53,7 +53,7 @@ def process_image(image_stem, image_suffices, metadata):
     #     print(e)
     #     print("error in processing image", image_stem)
 
-if datasetName == "Thingi10K":
+if dataset_name == "Thingi10K":
     CATEGORY_LABEL="Category"
     FILENAME_LABEL="File ID"
 
@@ -83,7 +83,7 @@ else:  # FreeCADLib,  or  ModelNet
         filename = entry["filename"]
         category = entry["category"]
 
-        if datasetName == "fclib":
+        if dataset_name == "fclib":
             #del  metadata["center"]
             if splittingFastenerCategory and category == "Fasteners":
                 entry["category"] = entry["subcategories"][0]

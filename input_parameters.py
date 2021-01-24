@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import print_function, division
 import os
 import os.path
@@ -20,15 +21,15 @@ generatingMultiViewImage = not generatingThicknessViewImage
 usingGrayscaleImage = not generatingThicknessViewImage
 # also generate meta data for CAD geometry like step file
 
-#datasetName = "Thingi10K"       # all data in one folder
-datasetName =  "ModelNet"       # 
-#datasetName = "fclib"    
+#dataset_name = "Thingi10K"       # all data in one folder, do not use, categorization not ideal
+dataset_name =  "ModelNet"       #  has two variant, modelnet10 and modelnet40
+#dataset_name = "fclib"    
 
 metadata_suffix = "json"
 hasPerfileMetadata  = False  #  detected by replace input file suffix to json and test existence
 # but still needs to merge extra
 
-if datasetName == "Thingi10K":
+if dataset_name == "Thingi10K":
 
     isMeshFile = True    # choose between  part and mesh input format
     hasPerfileMetadata  = True
@@ -69,10 +70,11 @@ if datasetName == "Thingi10K":
         # collect from  output folder
 
     ###########################
-elif datasetName == "ModelNet":
+elif dataset_name == "ModelNet":
     isMeshFile = True    # choose between  part and mesh input format
     # off mesh file is not manifold, cause error in thickness view generation
     hasPerfileMetadata  = False  # where is the metadata like tag and c
+    isModelNet40 = False
 
     ##############################
     if testing:
@@ -80,15 +82,20 @@ elif datasetName == "ModelNet":
         output_root_path = "./testdata/testModelNet_output"
         dataset_metadata_filename = "testModelNet_dataset.json"
     else:
-        root_path = DATA_DIR + "ModelNet10"
-        output_root_path = DATA_DIR + "ModelNet10_output"
-        dataset_metadata_filename = "ModelNet10_dataset.json"
+        if not  isModelNet40:
+            root_path = DATA_DIR + "ModelNet10"
+            output_root_path = DATA_DIR + "ModelNet10_output"
+            dataset_metadata_filename = "ModelNet10_dataset.json"
+        else:
+            root_path = DATA_DIR + "ModelNet40"
+            output_root_path = DATA_DIR + "ModelNetr40_output"
+            dataset_metadata_filename = "ModelNet40_dataset.json"
 
-elif datasetName == "fclib":
+elif dataset_name == "fclib":
     from fclib_parameters import *
     isMeshFile = False
 else:
-    print(datasetName, "dataset not supported, check spelling")
+    print(dataset_name, "dataset not supported, check spelling")
 
 if generatingThicknessViewImage:
     output_root_path = output_root_path + "_thickness"
@@ -148,7 +155,7 @@ if generatingThicknessViewImage:
     im_width, im_height = 60, 60   # generated
     model_input_width, model_input_height = 60, 60   # after padding, for input into tensorflow
 else:
-    if datasetName == "Thingi10K":
+    if dataset_name == "Thingi10K":
         im_width, im_height = 60, 60   # generated, before padding
         #final image size to be learned by AI
         model_input_width, model_input_height = 64, 64
@@ -194,19 +201,33 @@ else:
 if not concatingImage:
     _processed_imagedata_filename = "nview_" + _processed_imagedata_filename
 
-processed_imagedata_filename = output_root_path + os.path.sep + _processed_imagedata_filename
+processed_imagedata_filepath = output_root_path + os.path.sep + _processed_imagedata_filename
 
+######################################################################################
 ## saved model file to continue model fit
-_saved_model_file = "model_saved"
+_saved_model_name = dataset_name
+if dataset_name == "ModelNet":
+    if isModelNet40:
+        _saved_model_name = "ModelNet40"
+    else:
+        _saved_model_name = "ModelNet10"  
+
 if usingMixedInputModel:
-    _saved_model_file = "mixed_input_" +  _saved_model_file
+    _saved_model_name = "mixed_input_" +  _saved_model_name
 
 if generatingMultiViewImage:
-    _saved_model_file = "multiview_" +  _saved_model_file
+    _saved_model_name = "multiview_" +  _saved_model_name
 else:
     if usingOnlyThicknessChannel:
-        _saved_model_file = "thickness_" +  _saved_model_file
+        _saved_model_name = "thickness_" +  _saved_model_name
     else:
-        _saved_model_file = "DT_" +  _saved_model_file
+        _saved_model_name = "DT_" +  _saved_model_name
 
-saved_model_file = output_root_path + os.path.sep + _saved_model_file
+saved_model_file = output_root_path + os.path.sep + _saved_model_name
+
+
+modelnet40_classes = ['airplane','bathtub','bed','bench','bookshelf','bottle','bowl','car','chair',
+                         'cone','cup','curtain','desk','door','dresser','flower_pot','glass_box',
+                         'guitar','keyboard','lamp','laptop','mantel','monitor','night_stand',
+                         'person','piano','plant','radio','range_hood','sink','sofa','stairs',
+                         'stool','table','tent','toilet','tv_stand','vase','wardrobe','xbox']
