@@ -39,15 +39,14 @@ def collectImages(filename_stem, suffices):
                 img = cv2.imread(f, 0)     # Load only  the first channel of color image as grayscale
             else:
                 img = cv2.imread(f)  # color/ multiple channel
-                if usingOnlyThicknessChannel:
-                    img = img[:, :, 1]  # choose only the thickness channel
-                else:
-                    img = img[:, :, :channel_count]  # choose the depth and thickness channels
             if img.shape[0] > model_input_width and img.shape[1] > model_input_height:   # perhaps, padding is needed if slightly smaller
                 img = cv2.resize(img,(model_input_width, model_input_height))
+            if normalizingImage:
+                img = img / 255
+            
         elif f.endswith(".csv"):
             im = np.loadtxt(f, delimiter=',')
-            if not normalizingImage:
+            if normalizingImage:
                 immax = np.max(im) # some point, value to too big, NAN, that scaling to all zeros
                 if immax > 1e5 or immax < 1e-3:
                     return None
@@ -61,7 +60,7 @@ def collectImages(filename_stem, suffices):
         if binarizingImage and not compressingImage:
             th = cv2.adaptiveThreshold(img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
                         cv2.THRESH_BINARY,11,2)
-        if paddingImage:
+        if paddingImage:   # padding should be done in tensorflow during data augmentation
             # 3 view images should have the same padding offset?
             #print("before padding: ", img.shape)
             img = padImage(img, (model_input_width, model_input_height))

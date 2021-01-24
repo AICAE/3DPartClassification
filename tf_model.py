@@ -46,9 +46,10 @@ class TDModel(object):
     def __init__(self, s):
         self.settings = s
         self.total_classes = s["total_classes"]
-        self.OUT_NODE_COUNT = self.total_classes
+        self.OUT_NODE_COUNT = 256
         self.usingMixedInputs = s["usingMixedInputs"]
         self.usingMaxViewPooling = False
+        self.usingDataAugmentation = True
         self.regress=s["regress"]
 
     def create_mlp(self, dim):
@@ -77,7 +78,7 @@ class TDModel(object):
             return x
 
 
-    def create_cnn(self, inputShape, filters=(8, 16, 32), data_augmentation=False):
+    def create_cnn(self, inputShape, filters=(16, 32, 64)):
         # inputShape does not include the batch_size, but view_count
         # initialize the input shape and channel dimension, assuming
         # TensorFlow/channels-last ordering
@@ -97,9 +98,11 @@ class TDModel(object):
         viewDim = 0
         nviews = inputShape[viewDim]
         hasMultipleChannel = len(inputShape) >=4  and inputShape[-1] > 1
-        usingBatchNormal = False
-        chanDim = len(inputShape) - 1  # channel_last
-        local_feature_count = 32
+        usingBatchNormal = True
+        chanDim = - 1  # channel_last
+
+        local_feature_count = 64
+
         inputs = Input(shape=tuple(inputShape))
         #print(Input.shape)
 
@@ -109,42 +112,45 @@ class TDModel(object):
             # AUGMENTATION => CONV => RELU => BN => POOL
 
             x0 = inputs[:, v]
-            if data_augmentation:
+            if self.usingDataAugmentation:
                 x = RandomFlip("horizontal_and_vertical")(x0)  # important if object is not aligned
                 x = RandomRotation(0.2)(x)
                 # random shift/padding, may also help
             else:
                 x = x0  # fetch only a single view image
 
-            # loop over the number of filters
+            # loop over the number of filters, from smaller to bigger
             for (i, f) in enumerate(filters):
                 # if this is the first CONV layer then set the input appropriately
-                x = Conv2D(f, (3, 3), padding="same")(x)  # how about stride?
-                x = Activation("relu")(x)
+                x = Conv2D(f, (3, 3), padding="same", activation='relu')(x)
+                # input image size is small, use the default strides = (1,1)
+                #x = Activation("relu")(x)  # merged into Conv2D
                 if usingBatchNormal:
                     x = BatchNormalization(axis=chanDim)(x)  # not needed for binary image?
                 x = MaxPooling2D(pool_size=(2, 2))(x)
 
             # flatten the volume, then FC => RELU => BN => DROPOUT
             x = Flatten()(x)
-            x = Dense(local_feature_count)(x)
-            x = Activation("relu")(x)
-            if usingBatchNormal:
-                x = BatchNormalization(axis=chanDim)(x)  #BN has some Dropout's regularization effect
-            else:
-                x = Dropout(0.5)(x)
+            # x = Dense(local_feature_count)(x)
+            # x = Activation("relu")(x)
+            # if usingBatchNormal:
+            #     x = BatchNormalization(axis=chanDim)(x)  #BN has some Dropout's regularization effect
+            # else:
+            #     x = Dropout(0.5)(x)
             view_pool.append(x)
 
         # view pooling
         x = self.view_pooling(view_pool)
-        # why reduce_mean? in MVCNN?
-        x = Flatten()(x)
-        x = Dropout(0.5)(x)
 
-        # apply another FC layer, this one to match the number of nodes
-        x = Dense(self.OUT_NODE_COUNT)(x)
-        x = Activation("relu")(x)
+        x = Dense(self.OUT_NODE_COUNT, activation='relu')(x)
+        #x = Activation("relu")(x)
+        x = Dropout(0.6)(x)
 
+        x = Dense(self.OUT_NODE_COUNT, activation='relu')(x)
+        #x = Activation("relu")(x)
+        x = Dropout(0.6)(x)
+
+        # apply another FC layer, this one to match the number of classes
         if not self.usingMixedInputs:
             x = Dense(self.total_classes, activation="softmax")(x)
 

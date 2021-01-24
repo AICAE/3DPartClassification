@@ -6,13 +6,15 @@ import subprocess
 import shutil
 import glob
 
+DATA_DIR="/mnt/windata/MyData/"
 testing = False   # for debugging purpose
 usingMixedInputModel = True  # False: if use only image input 
 
 generatingThicknessViewImage = True # also generate meta data for CAD geometry like step file
-usingOnlyThicknessChannel = True
+usingOnlyThicknessChannel = False  # if False, use thickness and depth
 channel_count = 2 if generatingThicknessViewImage else 1
 channel_count = 1 if usingOnlyThicknessChannel else channel_count
+thickness_channel = 1  # second channel
 
 generatingMultiViewImage = not generatingThicknessViewImage
 usingGrayscaleImage = not generatingThicknessViewImage
@@ -37,8 +39,8 @@ if datasetName == "Thingi10K":
         output_root_path = "./testdata/testThingi10K_output"
         dataset_metadata_filename =  "testThingi10K_dataset.json"
     else:
-        root_path = "/mnt/windata/MyData/Thingi10K_dataset"
-        output_root_path = "/mnt/windata/MyData/Thingi10K_dataset_output"
+        root_path = DATA_DIR + "Thingi10K_dataset"
+        output_root_path = DATA_DIR + "Thingi10K_dataset_output"
         dataset_metadata_filename = "Thingi10K_dataset.json"
 
     def collect_metadata():
@@ -78,8 +80,8 @@ elif datasetName == "ModelNet":
         output_root_path = "./testdata/testModelNet_output"
         dataset_metadata_filename = "testModelNet_dataset.json"
     else:
-        root_path = "/mnt/windata/MyData/ModelNet10"
-        output_root_path = "/opt/ModelNet10_output"
+        root_path = DATA_DIR + "ModelNet10"
+        output_root_path = DATA_DIR + "ModelNet10_output"
         dataset_metadata_filename = "ModelNet10_dataset.json"
 
 elif datasetName == "fclib":
@@ -138,12 +140,13 @@ view_count = 3
 binarizingImage = not generatingThicknessViewImage
 compressingImage = False and binarizingImage
 concatingImage = False # do not concat !!!, so image can be flipped, and have view pooling
+paddingImage = False  # let tensorflow do random padding for data augmentation
 
 ## image pixel size has been hardcoded into view image generator apps
 if generatingThicknessViewImage:
     normalizingImage = True
-    im_width, im_height = 64, 64   # generated
-    model_input_width, model_input_height = 32, 32   # after padding, for input into tensorflow
+    im_width, im_height = 60, 60   # generated
+    model_input_width, model_input_height = 60, 60   # after padding, for input into tensorflow
 else:
     if datasetName == "Thingi10K":
         im_width, im_height = 60, 60   # generated, before padding
@@ -163,7 +166,7 @@ if compressingImage:
 else:
     result_shape = (view_count, model_input_height, model_input_width)  # Y axis as the first index in matrix data
 
-paddingImage = (model_input_width > im_width  and model_input_width < im_width* 1.5) or (model_input_height > im_height)
+#paddingImage = (model_input_width > im_width  and model_input_width < im_width* 1.5) or (model_input_height > im_height)
 ## concat
 if concatingImage:
     model_input_shape = [model_input_height, model_input_width*view_count, channel_count]
@@ -204,6 +207,6 @@ else:
     if usingOnlyThicknessChannel:
         _saved_model_file = "thickness_" +  _saved_model_file
     else:
-        _saved_model_file = "3ch_" +  _saved_model_file
+        _saved_model_file = "DT_" +  _saved_model_file
 
 saved_model_file = output_root_path + os.path.sep + _saved_model_file

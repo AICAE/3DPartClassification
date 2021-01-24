@@ -7,6 +7,7 @@ import os.path
 #########################
 # download part data and generate classification by folder structure
 
+testing = False
 MechanicalOnly = True  # no electronics parts
 splittingFastenerCategory = True
 # can be further limited to fasteners of Mechanical parts

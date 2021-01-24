@@ -42,7 +42,7 @@ def generate_view_images(input_filename, is_thickness=True, working_dir=None, in
     
     #print(input_filename, working_dir)
     if is_thickness==True:
-        args = ["--grid", str(im_width), str(im_width), str(im_width) ]
+        args = ["--grid", str(im_width), str(im_width), str(im_width)]   #  + ["--bop"]
         if isMeshFile:
             assert info
             args += ["--bbox"] + [ str(v) for v in info["bbox"]] 
@@ -55,9 +55,16 @@ def generate_view_images(input_filename, is_thickness=True, working_dir=None, in
 
     p = subprocess.Popen(cmd, cwd=working_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, error = p.communicate()
-    print(output, error)
+    output, error = output.decode('ascii'), error.decode('ascii')
+    if len(output) > 256:
+        outfile = output_filepath_stem + "_output.log"
+        with open(outfile, "w") as f:
+            f.write(output)
+        print("output message is long, dump to file: ", outfile)
+    else:
+        print(output, error)
     # return code check or result file check
-    ret = glob.glob(os.path.dirname(get_filename_stem(input_filename) + "*.png"))
+    ret = glob.glob(os.path.dirname(get_filename_stem(input_filename) + "*" + image_suffix))
     assert(len(ret))
     #sys.exit()  # debugging stop after processing the first file
 
@@ -147,15 +154,18 @@ def _process_input_file(input_file_path, output_file_path):
     else:
         input_file = input_file_path
 
+    if len(glob.glob(output_stem + "*" + image_suffix )) == view_count:
+        print("Generated image found, skip this input file: ", input_file)
+        return True
+
     cwd = os.path.abspath(os.path.dirname(output_file_path))
     if generatingMultiViewImage:
         generate_view_images(input_file, False, cwd)
-        if len(glob.glob(output_stem + "*.png")) < view_count:
-            return False
     if generatingThicknessViewImage:
         generate_view_images(input_file, True, cwd, info)
-        if len(glob.glob(output_stem + "*.csv")) < view_count:
-            return False
+
+    if len(glob.glob(output_stem + "*" + image_suffix )) < view_count:
+        return False
     return True
 
 def process_input_file(input_file_path, output_file_path=None):
@@ -249,8 +259,8 @@ def write_dataset_metadata(dataset_metadata_filename):
 
 ##################################
 if __name__ == "__main__":
-    if os.path.exists(dataset_metadata_filename) and resumable:
-        with open(dataset_metadata_filename, 'r') as f:
+    if os.path.exists(dataset_metadata_filepath) and resumable:
+        with open(dataset_metadata_filepath, 'r') as f:
             existing_dataset = json.load(f)
     process_folder(root_path, output_root_path)
     #process_folder1(root_path)
@@ -259,6 +269,6 @@ if __name__ == "__main__":
         for file, fu in all_futures.items():
             if not fu.result():
                 process_error(file)
-    write_dataset_metadata(dataset_metadata_filename)
+    write_dataset_metadata(dataset_metadata_filepath)
     print("total registered files = ", len(PART_REGISTRY))
     print("total processed files = ", nb_processed)

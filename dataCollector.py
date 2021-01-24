@@ -88,7 +88,8 @@ else:  # FreeCADLib,  or  ModelNet
             if splittingFastenerCategory and category == "Fasteners":
                 entry["category"] = entry["subcategories"][0]
             # tmp hack
-            metafolder = "/mnt/windata/MyData/freecad_library_output" + os.path.sep + entry["path"]
+            #metafolder = "/mnt/windata/MyData/freecad_library_output" + os.path.sep + entry["path"]
+            metafolder = output_root_path + os.path.sep + entry["path"]
         else:
             metafolder = output_root_path + os.path.sep + entry["path"]
         filefolder = output_root_path + os.path.sep + entry["path"]
@@ -107,7 +108,10 @@ else:  # FreeCADLib,  or  ModelNet
             metadata["filename"] = filename
 
             metadata["category"] = entry["category"]
-            metadata["subcategories"] = entry["subcategories"]
+            if "subcategories" in entry:
+                metadata["subcategories"] = entry["subcategories"]
+            else:
+                metadata["subcategories"] = []
 
             process_image(image_stem, image_suffices, metadata)
         else:

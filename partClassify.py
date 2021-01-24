@@ -10,7 +10,9 @@ modelnet40_classes = ['airplane','bathtub','bed','bench','bookshelf','bottle','b
                          'stool','table','tent','toilet','tv_stand','vase','wardrobe','xbox']
 
 _is_debug = False
-_using_saved_model = False # 
+_using_saved_model = True # 
+BATCH_SIZE = 100  # if dataset is small, make this bigger
+EPOCH_COUNT = 750
 
 # before import tensorflow
 import logging
@@ -69,11 +71,19 @@ df = pd.read_json(processed_metadata_filepath)
 
 images = np.load(processed_imagedata_filename)  # pickle array of object type: allow_pickle=True
 print("[INFO] loaded images ndarray shape from file", images.shape)
+
+if len(images.shape) == 5:
+    if usingOnlyThicknessChannel:
+        images = images[:, :, :, :, thickness_channel]  # choose only the thickness channel
+    else:
+        images = images[:, :, :, :, :channel_count]  # choose the depth and thickness channels
+
+
 if images.shape[-1] > 3  and len(model_input_shape) > len(images.shape)-1  and model_input_shape[-1]==1:  
     # single channel does not have its dim
     new_shape = [images.shape[0]] + list(model_input_shape)
     images = np.reshape(images, new_shape)
-
+print("[INFO] loaded images ndarray shape from file", images.shape)
 
 if datasetName == "Thingi10K":
     CATEGORY_LABEL="Category"  # "Category" is too coarse to classify
@@ -240,8 +250,8 @@ else:
 # is that possible to set some model parameters after load, YES
 # https://www.tensorflow.org/api_docs/python/tf/keras/callbacks/LearningRateScheduler
 from tensorflow.keras import backend as K
-K.set_value(model.optimizer.learning_rate, 0.00001)
 print("Learning rate before second fit:", model.optimizer.learning_rate.numpy())
+K.set_value(model.optimizer.learning_rate, 0.00001)
 
 ## auto checkpoint save?
 # keras.callbacks.ModelCheckpoint
@@ -269,12 +279,12 @@ if usingMixedInputModel:
     history = model.fit(
         [trainAttrX, trainImagesX], trainY,
         validation_data=([testAttrX, testImagesX], testY),  # test does not have all classes
-        epochs=250, batch_size=1000)
+        epochs=EPOCH_COUNT, batch_size=BATCH_SIZE)
 else:
     history = model.fit(
         trainImagesX, trainY,
         validation_data=(testImagesX, testY),  # test does not have all classes
-        epochs=250, batch_size=1000) 
+        epochs=EPOCH_COUNT, batch_size=BATCH_SIZE)
 
 #####################################
 # save the model and carry on model fit in a second run
