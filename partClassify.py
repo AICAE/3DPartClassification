@@ -1,18 +1,28 @@
+# -*- coding: utf-8 -*-
 """
 
 """
 
-
-modelnet40_classes = ['airplane','bathtub','bed','bench','bookshelf','bottle','bowl','car','chair',
-                         'cone','cup','curtain','desk','door','dresser','flower_pot','glass_box',
-                         'guitar','keyboard','lamp','laptop','mantel','monitor','night_stand',
-                         'person','piano','plant','radio','range_hood','sink','sofa','stairs',
-                         'stool','table','tent','toilet','tv_stand','vase','wardrobe','xbox']
 
 _is_debug = False
 _using_saved_model = True # 
+usingKerasTuner = True
+
 BATCH_SIZE = 100  # if dataset is small, make this bigger
-EPOCH_COUNT = 750
+EPOCH_COUNT = 150
+
+import numpy as np
+import pandas as pd
+import argparse
+import locale
+import os
+import json
+import tempfile
+
+from input_parameters import dataset_name, model_input_shape, channel_count, thickness_channel, \
+    processed_metadata_filepath, processed_imagedata_filepath, saved_model_file, \
+    usingOnlyThicknessChannel, usingMixedInputModel
+from stratify import my_split
 
 # before import tensorflow
 import logging
@@ -20,6 +30,7 @@ logging.getLogger("tensorflow").setLevel(logging.ERROR)
 
 # import the necessary packages
 import tensorflow
+from tensorflow.keras.utils import to_categorical
 import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
 
@@ -29,7 +40,7 @@ tf.config.experimental.set_visible_devices(devices= my_devices, device_type='CPU
 
 if _is_debug:
     tf.debugging.experimental.enable_dump_debug_info(
-        "/tmp/tfdbg2_logdir",
+        tempfile.gettempdir() + os.path.sep + dataset_name + "_logdir",
         tensor_debug_mode="FULL_HEALTH",
         circular_buffer_size=-1)
     # after running the model: run `tensorboard --logdir /tmp/tfdbg2_logdir`
@@ -46,16 +57,6 @@ from sklearn.preprocessing import MinMaxScaler, LabelBinarizer
 from sklearn.preprocessing import OrdinalEncoder, LabelEncoder, OneHotEncoder
 from sklearn.model_selection import train_test_split
 
-import numpy as np
-import pandas as pd
-import argparse
-import locale
-import os
-import json
-
-from input_parameters import *
-from stratify import my_split
-
 
 from tf_model import TDModel
 
@@ -69,7 +70,7 @@ from tf_model import TDModel
 print("[INFO] loading classification data in metadata file")
 df = pd.read_json(processed_metadata_filepath)
 
-images = np.load(processed_imagedata_filename)  # pickle array of object type: allow_pickle=True
+images = np.load(processed_imagedata_filepath)  # pickle array of object type: allow_pickle=True
 print("[INFO] loaded images ndarray shape from file", images.shape)
 
 if len(images.shape) == 5:
@@ -80,12 +81,12 @@ if len(images.shape) == 5:
 
 
 if images.shape[-1] > 3  and len(model_input_shape) > len(images.shape)-1  and model_input_shape[-1]==1:  
-    # single channel does not have its dim
+    # if single channel does not have its dim
     new_shape = [images.shape[0]] + list(model_input_shape)
     images = np.reshape(images, new_shape)
 print("[INFO] loaded images ndarray shape from file", images.shape)
 
-if datasetName == "Thingi10K":
+if dataset_name == "Thingi10K":
     CATEGORY_LABEL="Category"  # "Category" is too coarse to classify
     SUBCATEGORY_LABEL="Subcategory"  # "Subcategory": "rc-vehicles",
     BBOX_LABEL="bbox"
@@ -93,7 +94,7 @@ if datasetName == "Thingi10K":
 
     FEATURES_INT = []
 
-else:  # FreeCADLib
+else:  # FreeCADLib  or ModelNet
     CATEGORY_LABEL="category"
     BBOX_LABEL="obb"
     categories = pd.Series(df["category"], dtype="category")
@@ -221,7 +222,7 @@ print("[INFO] trainY shape by one-hot encoding ", trainY.shape)
 if _is_debug:
     print("testY with one-hot encoding ", testY.shape, testY)
 
-from tensorflow.keras.utils import to_categorical
+
 #trainY = to_categorical(trainY)  #return None
 #testY = to_categorical(testY)
 
@@ -230,32 +231,9 @@ trainAttrX = pd.DataFrame(trainDataset, columns = FEATURES)
 testAttrX = pd.DataFrame(testDataset, columns = FEATURES)
 
 ##########################################
-if _using_saved_model and os.path.exists(saved_model_file):
-    print("[INFO] load previously saved model file: ", saved_model_file)
-
-    model = tensorflow.keras.models.load_model(saved_model_file)
-    model_loaded = True
-else:
-    print("[INFO] model input image shape, and images shape", model_input_shape, imageShape)
-    model_settings = { "total_classes": total_classes, "usingMixedInputs": usingMixedInputModel,
-                        "regress": False}
-
-    model = TDModel(model_settings).create_model(im_shape = model_input_shape, mlp_shape = trainAttrX.shape)
-    #########################################
-    opt = Adam(lr=1e-4, beta_1=0.7, decay=1e-5 / 200)  # lr: learning rate from 1e-3 decrease to -5
-    # the loss functions depends on the problem itself, for multiple classification 
-    model.compile(loss="categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
-    # sparse_categorical_crossentropy
-
-# is that possible to set some model parameters after load, YES
-# https://www.tensorflow.org/api_docs/python/tf/keras/callbacks/LearningRateScheduler
-from tensorflow.keras import backend as K
-print("Learning rate before second fit:", model.optimizer.learning_rate.numpy())
-K.set_value(model.optimizer.learning_rate, 0.00001)
-
 ## auto checkpoint save?
 # keras.callbacks.ModelCheckpoint
-checkpoint_filepath = '/tmp/tf_checkpoint'
+checkpoint_filepath = tempfile.tempdir + '/tf_checkpoint'
 model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
     filepath=checkpoint_filepath,
     save_weights_only=True,
@@ -270,65 +248,111 @@ def keyboardInterruptHandler(signal, frame):
     exit(0)
 signal.signal(signal.SIGINT, keyboardInterruptHandler)
 
-# init the weight values
-# train the model
-print("[INFO] training part recognition...")
-callbacks=[model_checkpoint_callback]
+##########################################
+print("[INFO] model input image shape, and images shape", model_input_shape, imageShape)
+model_settings = { "total_classes": total_classes, "usingMixedInputs": usingMixedInputModel,
+                    "image_width": model_input_shape[-3], "regress": False}
+opt = Adam(lr=1e-4, beta_1=0.7, decay=1e-5 / 200)  # lr: learning rate from 1e-3 decrease to -5
 
-if usingMixedInputModel:
-    history = model.fit(
-        [trainAttrX, trainImagesX], trainY,
-        validation_data=([testAttrX, testImagesX], testY),  # test does not have all classes
-        epochs=EPOCH_COUNT, batch_size=BATCH_SIZE)
+
+if usingKerasTuner:
+    print("[INFO] use keras tuner")
+    def build_model(hp):
+        model = TDModel(model_settings, hp).create_model(im_shape = model_input_shape, mlp_shape = trainAttrX.shape)
+        model.compile(loss="categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
+        return model
+
+    import kerastuner as kt
+
+    tuner = kt.Hyperband(
+        build_model,
+        objective='val_accuracy',
+        max_epochs=30,  # can that based on a pretrained model?
+        hyperband_iterations=2)
+
+    # TODO: error: ValueError: Layer model_1 expects 2 input(s), but it received 3 input tensors.
+    tuner.search([trainAttrX, trainImagesX], trainY,
+                validation_data=([testAttrX, testImagesX], testY),
+                epochs=30,  # this is not enough for this kind of model
+                callbacks=[tf.keras.callbacks.EarlyStopping(patience=1)])
+
+    best_model = tuner.get_best_models(1)[0]
+    best_model.save(saved_model_file)
 else:
-    history = model.fit(
-        trainImagesX, trainY,
-        validation_data=(testImagesX, testY),  # test does not have all classes
-        epochs=EPOCH_COUNT, batch_size=BATCH_SIZE)
 
-#####################################
-# save the model and carry on model fit in a second run
-# https://www.tensorflow.org/guide/keras/save_and_serialize
-model.save(saved_model_file)
+    if _using_saved_model and os.path.exists(saved_model_file):
+        print("[INFO] load previously saved model file: ", saved_model_file)
 
-# show trainable parameter count
-if _is_debug:
-    model.summary()
+        model = tensorflow.keras.models.load_model(saved_model_file)
+        model_loaded = True
+    else:
 
-# using history can plot val_accurary (validation accurary)
-import matplotlib.pyplot as plt
-plt.plot(history.history['accuracy'], label='accuracy')
-plt.plot(history.history['val_accuracy'], label = 'val_accuracy')
-plt.xlabel('Epoch')
-plt.ylabel('Accuracy')
-plt.ylim([0.5, 1])
-plt.legend(loc='lower right')
-if _is_debug:
-    plt.show()
+        model = TDModel(model_settings).create_model(im_shape = model_input_shape, mlp_shape = trainAttrX.shape)
 
-# convert the history.history dict to a pandas DataFrame:
-import pandas as pd 
-hist_df = pd.DataFrame(history.history) 
+        # the loss functions depends on the problem itself, for multiple classification 
+        model.compile(loss="categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
+        # todo: sparse_categorical_crossentropy
 
-# save to json:  
-hist_json_file = saved_model_file + '.json' 
-with open(hist_json_file, mode='w') as f:
-    hist_df.to_json(f)
+    #########################################
 
-########################################
-# make predictions on the testing data
-if usingMixedInputModel:
-    preds = model.predict([testAttrX, testImagesX])
-else:
-    preds = model.predict(testImagesX)
+    # is that possible to set some model parameters after load, YES
+    # https://www.tensorflow.org/api_docs/python/tf/keras/callbacks/LearningRateScheduler
+    from tensorflow.keras import backend as K
+    print("Learning rate before second fit:", model.optimizer.learning_rate.numpy())
+    K.set_value(model.optimizer.learning_rate, 0.000001)
 
-# compute the difference between the *predicted*  and the *actual*  
-# # then compute the percentage difference 
 
-# 
-diff = preds - testY
-percentDiff = np.sum(np.sum(np.abs(diff)) / np.sum(testY)) * 100
-absPercentDiff = np.abs(percentDiff)
-print("[INFO] validate prediction by test data, error percentage is: ", absPercentDiff)
+    # init the weight values
+    print("[INFO] training part recognition...")
+    callbacks=[model_checkpoint_callback]
 
-#########################################
+    if usingMixedInputModel:
+        history = model.fit(
+            [trainAttrX, trainImagesX], trainY,
+            validation_data=([testAttrX, testImagesX], testY),  # test does not have all classes
+            epochs=EPOCH_COUNT, batch_size=BATCH_SIZE)
+    else:
+        history = model.fit(
+            trainImagesX, trainY,
+            validation_data=(testImagesX, testY),  # test does not have all classes
+            epochs=EPOCH_COUNT, batch_size=BATCH_SIZE)
+
+    #####################################
+    # save the model and carry on model fit in a second run
+    # https://www.tensorflow.org/guide/keras/save_and_serialize
+    model.save(saved_model_file)
+
+
+    # convert the history.history dict to a pandas DataFrame:
+    import pandas as pd 
+    hist_df = pd.DataFrame(history.history) 
+
+    # save to json:  
+    hist_json_file = saved_model_file + '.json' 
+    with open(hist_json_file, mode='w') as f:
+        hist_df.to_json(f)
+
+    ########################################
+    # Evaluate the model on the test data using `evaluate`
+    print("Evaluate on test data")
+
+    # make predictions on the testing data
+    if usingMixedInputModel:
+        preds = model.predict([testAttrX, testImagesX])
+        results = model.evaluate([testAttrX, testImagesX], testY, batch_size=128)
+    else:
+        preds = model.predict(testImagesX)
+        results = model.evaluate(testImagesX, testY, batch_size=128)
+
+    print("test loss, test acc:", results)
+
+    # compute the difference between the *predicted*  and the *actual*  
+    # # then compute the percentage difference 
+
+    # 
+    diff = preds - testY
+    percentDiff = np.sum(np.sum(np.abs(diff)) / np.sum(testY)) * 100
+    absPercentDiff = np.abs(percentDiff)
+    print("[INFO] validate prediction by test data, error percentage is: ", absPercentDiff)
+
+    #########################################

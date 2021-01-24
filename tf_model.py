@@ -16,40 +16,40 @@ import tensorflow as tf
 from tensorflow.keras.layers.experimental.preprocessing import RandomFlip, RandomRotation
 
 
-'''
-# not needed, not completed
-class ViewPool(tensorflow.keras.layers.Layer):
-    # see also the class Pooling2D layer
-    def __init__(self, input_views,
-                pool_size=(2, 2), strides=None, padding='valid', data_format=None, name=None, **kwargs):
-        super(ViewPool, self).__init__()
-        w_init = tf.random_normal_initializer()
-        nviews = len(input_views)
-        view_shape = input_views[0].shape
-        input_shape = 
-        self.w = tf.Variable(
-            initial_value=w_init(shape=input_shape, dtype="float32"),
-            trainable=True,
-        )
-        b_init = tf.zeros_initializer()
-        self.b = tf.Variable(
-            initial_value=b_init(shape=(units,), dtype="float32"), trainable=True
-        )
-
-    def call(self, inputs):
-        return tf.matmul(inputs, self.w) + self.b
-'''
 
 class TDModel(object):
     """ Thickness and depth dual channel
+    tuner is also supported, if 
     """
-    def __init__(self, s):
+    def __init__(self, s, hp=None):
         self.settings = s
         self.total_classes = s["total_classes"]
-        self.OUT_NODE_COUNT = 256
         self.usingMixedInputs = s["usingMixedInputs"]
+        self.image_width = s["image_width"]
+
+        if hp:
+            self.mlp_dense_p = hp.Int('units', min_value = 8, max_value = 32, step = 8)
+            self.local_feature_count = 64
+            self.cnn_filters=[]
+            if self.image_width <=64:
+                bf = (16, 32, 64)
+            for i,w in enumerate(bf):
+                self.cnn_filters.append(hp.Int('filters_' + str(i), w, w*2, step=w//2))
+            self.second_out_dense_p = hp.Int('filters_' + str(i), 128, 512, step=128)
+            self.out_dense_p = hp.Int('filters_' + str(i), 128, 512, step=128)
+            self.cnn_dense_dropout_p = hp.Float('dropout', 0, 0.6, step=0.1, default=0.5)
+        else:
+            self.mlp_dense_p = 8
+            self.local_feature_count = 64
+            self.cnn_filters=(16, 32, 64)
+            self.second_out_dense_p = 256  # layer before output Dense layer
+            self.out_dense_p = 256
+            self.cnn_dense_dropout_p = 0.6
+
+
         self.usingMaxViewPooling = False
         self.usingDataAugmentation = True
+        self.usingBatchNormal = True
         self.regress=s["regress"]
 
     def create_mlp(self, dim):
@@ -57,8 +57,8 @@ class TDModel(object):
         # if tensorflow.feature_column is used as input, 
         # then the first layer must be DenseFeatures
         model = Sequential()
-        model.add(Dense(8, input_dim=dim, activation="relu"))  # todo: why units = 8 ???
-        model.add(Dense(self.OUT_NODE_COUNT, activation="relu"))
+        model.add(Dense(self.mlp_dense_p, input_dim=dim, activation="relu"))  # todo: why units = 8 ???
+        model.add(Dense(self.out_dense_p, activation="relu"))
 
         # check to see if the regression node should be added
         if self.regress:
@@ -78,7 +78,7 @@ class TDModel(object):
             return x
 
 
-    def create_cnn(self, inputShape, filters=(16, 32, 64)):
+    def create_cnn(self, inputShape):
         # inputShape does not include the batch_size, but view_count
         # initialize the input shape and channel dimension, assuming
         # TensorFlow/channels-last ordering
@@ -98,10 +98,8 @@ class TDModel(object):
         viewDim = 0
         nviews = inputShape[viewDim]
         hasMultipleChannel = len(inputShape) >=4  and inputShape[-1] > 1
-        usingBatchNormal = True
-        chanDim = - 1  # channel_last
 
-        local_feature_count = 64
+        chanDim = - 1  # channel_last
 
         inputs = Input(shape=tuple(inputShape))
         #print(Input.shape)
@@ -120,12 +118,12 @@ class TDModel(object):
                 x = x0  # fetch only a single view image
 
             # loop over the number of filters, from smaller to bigger
-            for (i, f) in enumerate(filters):
+            for (i, f) in enumerate(self.cnn_filters):
                 # if this is the first CONV layer then set the input appropriately
                 x = Conv2D(f, (3, 3), padding="same", activation='relu')(x)
                 # input image size is small, use the default strides = (1,1)
                 #x = Activation("relu")(x)  # merged into Conv2D
-                if usingBatchNormal:
+                if self.usingBatchNormal:
                     x = BatchNormalization(axis=chanDim)(x)  # not needed for binary image?
                 x = MaxPooling2D(pool_size=(2, 2))(x)
 
@@ -142,13 +140,13 @@ class TDModel(object):
         # view pooling
         x = self.view_pooling(view_pool)
 
-        x = Dense(self.OUT_NODE_COUNT, activation='relu')(x)
+        x = Dense(self.second_out_dense_p, activation='relu')(x)
         #x = Activation("relu")(x)
-        x = Dropout(0.6)(x)
+        x = Dropout(self.cnn_dense_dropout_p)(x)
 
-        x = Dense(self.OUT_NODE_COUNT, activation='relu')(x)
+        x = Dense(self.out_dense_p, activation='relu')(x)
         #x = Activation("relu")(x)
-        x = Dropout(0.6)(x)
+        x = Dropout(self.cnn_dense_dropout_p)(x)
 
         # apply another FC layer, this one to match the number of classes
         if not self.usingMixedInputs:
@@ -179,7 +177,7 @@ class TDModel(object):
 
             # our final FC layer head will have two dense layers, 
             # the final one being our regression head
-            x = Dense(self.OUT_NODE_COUNT, activation="relu")(combinedInput)  # todo: how to decide the first param? 
+            x = Dense(self.out_dense_p, activation="relu")(combinedInput)  # todo: how to decide the first param? 
             x = Dense(self.total_classes, activation="softmax")(x) 
             # https://www.analyticsvidhya.com/blog/2019/08/detailed-guide-7-loss-functions-machine-learning-python-code/
             # "softmax", "sigmoid" make no diff, is needed for multiple label classification

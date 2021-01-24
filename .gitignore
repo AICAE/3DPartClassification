@@ -9,6 +9,8 @@ stage/*
 .vscode/*
 
 *_example/*
+results/*
+untitled_project/*
 
 *.pdf
 #*.docx
