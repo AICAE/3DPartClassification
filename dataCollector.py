@@ -83,7 +83,7 @@ else:  # FreeCADLib,  or  ModelNet
         filename = entry["filename"]
         category = entry["category"]
 
-        if dataset_name == "fclib":
+        if dataset_name == "FreeCAD_lib":
             #del  metadata["center"]
             if splittingFastenerCategory and category == "Fasteners":
                 entry["category"] = entry["subcategories"][0]

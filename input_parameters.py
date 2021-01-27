@@ -7,9 +7,17 @@ import subprocess
 import shutil
 import glob
 
-DATA_DIR="/mnt/windata/MyData/"
-testing = False   # for debugging purpose
-usingMixedInputModel = True  # False: if use only image input 
+DATA_DIR="/mnt/windata/DataDir/"
+
+testing = True   # for debugging purpose
+#dataset_name = "Thingi10K"       # all data in one folder, do not use, categorization not ideal
+dataset_name =  "ModelNet"       #  has two variants, modelnet10 and modelnet40
+isModelNet40 = False
+#dataset_name = "FreeCAD_lib"   # Mechanical CAD part library
+dataset_name = "KiCAD_lib"       # ECAD KiCAD library
+
+usingKerasTuner = False
+usingMixedInputModel = True  # False: if use only image input
 
 generatingThicknessViewImage = True # also generate meta data for CAD geometry like step file
 usingOnlyThicknessChannel = False  # if False, use thickness and depth
@@ -17,17 +25,15 @@ channel_count = 2 if generatingThicknessViewImage else 1
 channel_count = 1 if usingOnlyThicknessChannel else channel_count
 thickness_channel = 1  # second channel
 
-generatingMultiViewImage = not generatingThicknessViewImage
+generatingMultiViewImage = not generatingThicknessViewImage  # deprecated
 usingGrayscaleImage = not generatingThicknessViewImage
 # also generate meta data for CAD geometry like step file
 
-#dataset_name = "Thingi10K"       # all data in one folder, do not use, categorization not ideal
-dataset_name =  "ModelNet"       #  has two variant, modelnet10 and modelnet40
-#dataset_name = "fclib"    
 
 metadata_suffix = "json"
 hasPerfileMetadata  = False  #  detected by replace input file suffix to json and test existence
 # but still needs to merge extra
+isValidSubfolder = lambda dir: True   # dump subfolder filter, to be overidden if necessary
 
 if dataset_name == "Thingi10K":
 
@@ -37,7 +43,7 @@ if dataset_name == "Thingi10K":
     ##############################
     if testing:
         root_path = "./testdata/testThingi10K_data"
-        output_root_path = "./testdata/testThingi10K_output"
+        output_root_path = root_path + "_output"
         dataset_metadata_filename =  "testThingi10K_dataset.json"
     else:
         root_path = DATA_DIR + "Thingi10K_dataset"
@@ -74,12 +80,11 @@ elif dataset_name == "ModelNet":
     isMeshFile = True    # choose between  part and mesh input format
     # off mesh file is not manifold, cause error in thickness view generation
     hasPerfileMetadata  = False  # where is the metadata like tag and c
-    isModelNet40 = False
 
     ##############################
     if testing:
         root_path = "./testdata/testModelNet_data"
-        output_root_path = "./testdata/testModelNet_output"
+        output_root_path = root_path  + "_output"
         dataset_metadata_filename = "testModelNet_dataset.json"
     else:
         if not  isModelNet40:
@@ -91,7 +96,28 @@ elif dataset_name == "ModelNet":
             output_root_path = DATA_DIR + "ModelNetr40_output"
             dataset_metadata_filename = "ModelNet40_dataset.json"
 
-elif dataset_name == "fclib":
+elif dataset_name == "KiCAD_lib":
+    isMeshFile = False
+    hasPerfileMetadata  = False
+    supported_input_file_suffices = set(["stp", "step"])
+    input_file_suffix = "step"
+    if testing:
+        root_path = "./testdata/testKiCAD_data"
+        output_root_path = root_path + "_output"
+        dataset_metadata_filename = "testKiCAD_dataset.json"
+    else:
+        root_path = DATA_DIR + "kicad-packages3D"
+        output_root_path = DATA_DIR + "kicad-packages3D_output"
+        dataset_metadata_filename = "kicad-packages3D_dataset.json"
+    
+    def isValidSubfolder(dir):
+        if not dir.endswith(".3dshapes"):
+            return False
+        if not testing and len(os.listdir(dir)) < 20:
+            return False
+        return True
+
+elif dataset_name == "FreeCAD_lib":
     from fclib_parameters import *
     isMeshFile = False
 else:
@@ -108,12 +134,12 @@ if isMeshFile:
     input_file_suffix = "stl"
     # stl is the only format needed for view generator
 
-    # freecad output stl can not been read by occt, but we need freecad to calc bbox ,etc 
-    import fcMeshPreprocessor  
+    # freecad output stl can not been read by occt, but we need freecad to calc bbox ,etc
+    import fcMeshPreprocessor
     # return a dict of bbox, area, volume,
     def generate_metadata(input, json_file_path):
         info = fcMeshPreprocessor.generateMetadata(input)
-        with open(json_file_path, "w") as outfile: 
+        with open(json_file_path, "w") as outfile:
             json.dump(info, outfile)
             print(json_file_path)
         return info
@@ -180,8 +206,7 @@ if concatingImage:
 else:
     model_input_shape = [view_count, model_input_height, model_input_width, channel_count]
 
-# if channel_count > 1:
-#     result_shape.append(channel_count)
+#########################################################################################
 ########### output control #########
 if testing:
     if os.path.exists(output_root_path):
@@ -210,7 +235,7 @@ if dataset_name == "ModelNet":
     if isModelNet40:
         _saved_model_name = "ModelNet40"
     else:
-        _saved_model_name = "ModelNet10"  
+        _saved_model_name = "ModelNet10"
 
 if usingMixedInputModel:
     _saved_model_name = "mixed_input_" +  _saved_model_name

@@ -15,7 +15,7 @@ import cv2
 
 from input_parameters import *
 
-if dataset_name == "fclib" and compressingImage:
+if dataset_name == "FreeCAD_lib" and compressingImage:
     sys.path.append(os.path.dirname(__file__) + os.path.sep + "compressImage")
     from compressImage import compressImageBlock as compressImageCpp
     from compressImage import compressImage

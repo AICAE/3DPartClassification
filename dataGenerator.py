@@ -26,7 +26,23 @@ ERROR_REGISTRY = OrderedDict()
 nb_processed = 0
 
 def get_filename_stem(input_filename):
-    return input_filename[:input_filename.rfind(".")] 
+    return input_filename[:input_filename.rfind(".")]
+
+def generate_view_cmd(is_thickness, input_filename, output_filepath_stem):
+    # depends on input_parameter.py
+    if is_thickness==True:
+        args = ["--grid", str(im_width), str(im_width), str(im_width)]   #  + ["--bop"]
+        if isMeshFile:
+            assert info
+            args += ["--bbox"] + [ str(v) for v in info["bbox"]] 
+            cmd = [ThicknessViewApp, input_filename, "-o", output_filepath_stem] + args
+            print(" ".join(cmd))
+        else:
+            cmd = [ThicknessViewApp, input_filename, "-o", output_filepath_stem] + args
+    else:   # multi view 
+        cmd = [MultiViewApp, input_filename]
+    
+    return cmd
 
 def generate_view_images(input_filename, is_thickness=True, working_dir=None, info=None):
     # input_filename should be an absolute path in the output folder
@@ -39,19 +55,9 @@ def generate_view_images(input_filename, is_thickness=True, working_dir=None, in
     if not working_dir:
         working_dir = os.path.dirname(input_filename)
     assert(os.path.exists(working_dir))
-    
     #print(input_filename, working_dir)
-    if is_thickness==True:
-        args = ["--grid", str(im_width), str(im_width), str(im_width)]   #  + ["--bop"]
-        if isMeshFile:
-            assert info
-            args += ["--bbox"] + [ str(v) for v in info["bbox"]] 
-            cmd = [ThicknessViewApp, input_filename, "-o", output_filepath_stem] + args
-            print(" ".join(cmd))
-        else:
-            cmd = [ThicknessViewApp, input_filename, "-o", output_filepath_stem] + args
-    else:   # multi view 
-        cmd = [MultiViewApp, input_filename]
+
+    cmd = generate_view_cmd(is_thickness, input_filename, output_filepath_stem)
 
     p = subprocess.Popen(cmd, cwd=working_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, error = p.communicate()
@@ -71,7 +77,7 @@ def generate_view_images(input_filename, is_thickness=True, working_dir=None, in
 def generate_output_file_path(file_path):
     # get relative path, then append with 
     rel = os.path.relpath(os.path.abspath(file_path), root_path)
-    out = output_root_path + os.path.sep+ rel
+    out = output_root_path + os.path.sep + rel
     if not os.path.exists(os.path.dirname(out)):
         os.makedirs(os.path.dirname(out))
     return out
@@ -188,10 +194,11 @@ def process_folder(input_folder, output_folder, level=0):
         os.makedirs(output_folder, exist_ok=True)
     #if level>=5: return None
     subFolders = [o for o in os.listdir(input_folder) if os.path.isdir(input_folder + os.path.sep + o)]
-    for d in sorted(subFolders):  #
+    for d in sorted(subFolders):  # recursive subfolder processing
         input_dir = input_folder + os.path.sep + d
         output_dir = output_folder + os.path.sep + d
-        process_folder(input_dir, output_dir, level+1)
+        if isValidSubfolder(input_dir):
+            process_folder(input_dir, output_dir, level+1)
 
     files = [o for o in os.listdir(input_folder) if os.path.isfile(input_folder + os.path.sep + o)]
     for f in files:

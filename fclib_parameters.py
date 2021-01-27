@@ -29,9 +29,9 @@ image_height = 480
 
 ################# IO path #################
 if testing:
-    root_path = "./testdata/testdata_fclib"
-    output_root_path = "./testdata/testdata_fclib_output"
-    dataset_metadata_filename =  "./testdata/testdata_fclib_output/test_data.json"
+    root_path = "./testdata/testFreeCAD_lib"
+    output_root_path = root_path + "_output"
+    dataset_metadata_filename =  output_root_path + "/test_data.json"
 else:
     output_root_path = "/mnt/windata/MyData/freecad_library_output"
     if not os.path.exists(output_root_path):
