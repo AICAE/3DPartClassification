@@ -9,7 +9,7 @@ const std::vector<std::string> PNAMES = {"_XY", "_YZ", "_ZX"};  // rolling
 const std::vector<std::string> TRINAMES = {"_TRI_XY", "_TRI_YZ", "_TRI_ZX"}; 
 
 #define DUMP_BOP_INTERSECTED_EDGES 0
-#define DUMP_BOP_GRID 0
+#define DUMP_BOP_GRID 1
 #define DUMP_PART_MESH 0
 #define USE_OPENCV 1
 

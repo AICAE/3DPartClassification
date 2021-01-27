@@ -34,6 +34,12 @@
 #include "BRep_Tool.hxx"
 #include "BRepTools.hxx"
 
+#include "BRepAlgoAPI_Fuse.hxx"
+#include "BRepAlgoAPI_Common.hxx"
+
+#include "STEPControl_Reader.hxx"
+#include "IFSelect_ReturnStatus.hxx"
+
 #include "BRepMesh_IncrementalMesh.hxx"
 #include "Poly_Array1OfTriangle.hxx"
 #include "TColgp_Array1OfPnt.hxx"
@@ -49,12 +55,13 @@
 #include "BRep_Builder.hxx"
 #include "BRepBuilderAPI_Transform.hxx"
 #include "BRepBuilderAPI_MakeEdge.hxx"
+#include "BRepBuilderAPI_Copy.hxx"
 
 #include "GProp_GProps.hxx"
 #include "BRepGProp.hxx"
-#include "BRepAlgoAPI_Common.hxx"
 
 #include "OSD_Path.hxx"
+#include "OSD_Exception.hxx"
 #include "StlAPI_Reader.hxx"
 #if OCC_VERSION_HEX >= 0x070300
 #include "RWStl.hxx"  // OCCT 7.4, read Shape from STL file
@@ -75,10 +82,11 @@ const int DIM=3;
 
 // this can be set, but must be set before call any functions.
 std::array<size_t, DIM> NGRIDS = {64, 64, 64};  // make it diff to test image size
-const bool NORMALIZED_THICKNESS = true;  // normalized to [0,1] according to boundbox minmax
 
 // normalized XYZ according to OBB, if input geometry has been oriented, then use AABB, not OBB
 bool USE_OBB = false;
+bool USE_CUBE_BOX = true;  // xyz use the same and max thickness (longest boundbox length)
+const bool NORMALIZED_THICKNESS = true;  // normalized to [0,1] according to boundbox minmax
 
 template <typename T> 
 using Mat = Eigen::Matrix<std::shared_ptr<T>, Eigen::Dynamic, Eigen::Dynamic> ;
@@ -104,10 +112,10 @@ void init_matrix(Mat<T>& mat)
 /// linear point grid (equally-spaced in one axis), 3D grid, slightly bigger than bound box
 struct GridInfo
 {
-    std::array<double, DIM> starts; // 
-    std::array<double, DIM> spaces;
-    std::array<size_t, DIM> nsteps;  // npixels (cells) in each axis
-    std::array<double, DIM> mins; // 
+    std::array<double, DIM> starts;  /// first grid line must outside of boundbox
+    std::array<double, DIM> spaces;  /// grid space in each dim
+    std::array<size_t, DIM> nsteps;  /// npixels (cells) in each axis
+    std::array<double, DIM> mins;    /// boundbox min, may be extened if USE_CUBE_BOX is true
     std::array<double, DIM> maxs;
 };
 
@@ -121,18 +129,38 @@ struct MeshData
 /// normalized to aspect ratios all one
 GridInfo generate_grid(const BoundBoxType bbox)
 {
-    double xmin, ymin, zmin, xmax, ymax, zmax;
-    xmin = bbox[0], ymin = bbox[1], zmin = bbox[2];
-    xmax = bbox[3], ymax = bbox[4], zmax = bbox[5];
-
+    std::array<scalar, DIM> mins, maxs;
+    mins[0] = bbox[0], mins[1] = bbox[1], mins[2] = bbox[2];
+    maxs[0] = bbox[3], maxs[1] = bbox[4], maxs[2] = bbox[5];
+    std::vector<scalar> lengths = {maxs[0]-mins[0], maxs[1]-mins[1], maxs[2]-mins[2]};
     int m = 1;  //  margin extention on each side, must be integer 1 cell width, other value not tested
-    std::array<double, DIM> spaces = {(xmax-xmin)/(NGRIDS[0]-2*m), 
-            (ymax-ymin)/(NGRIDS[1]-2*m), (zmax-zmin)/(NGRIDS[2]-2*m)};
-    std::array<double, DIM> starts = {xmin - spaces[0] * 0.5 * m, 
-            ymin - spaces[1] * 0.5 * m, zmin - spaces[2] * 0.5 * m};  // first cell's center
-    // {xmin, ymin, zmin}, {xmax, ymax, zmax}, 
-    GridInfo gInfo{starts, spaces, {NGRIDS[0]-1, NGRIDS[1]-1, NGRIDS[1]-1},
-        {xmin, ymin, zmin}, {xmax, ymax, zmax}};  // 
+    std::array<double, DIM> spaces;
+
+    if( USE_CUBE_BOX )
+    {
+        size_t imax = std::distance(lengths.cbegin(), std::max_element(lengths.cbegin(), lengths.cend()));
+        auto maxL = lengths[imax];
+        for(size_t i=0; i<DIM; i++)
+        {
+            if(imax != i)
+            {
+                scalar halfD = (lengths[imax] - lengths[i]) * 0.5;
+                mins[i] -= halfD;
+                maxs[i] += halfD;
+            }
+        }
+        spaces = {maxL/(NGRIDS[0]-2*m), maxL/(NGRIDS[1]-2*m), maxL/(NGRIDS[2]-2*m)};
+    }
+    else
+    {
+        spaces = {lengths[0]/(NGRIDS[0]-2*m), lengths[1]/(NGRIDS[1]-2*m), lengths[2]/(NGRIDS[2]-2*m)};
+    }
+
+    std::array<double, DIM> starts = {mins[0] - spaces[0] * 0.5 * m, 
+            mins[1] - spaces[1] * 0.5 * m, mins[2] - spaces[2] * 0.5 * m};  // first cell's center
+
+    GridInfo gInfo{starts, spaces, {NGRIDS[0]-1, NGRIDS[1]-1, NGRIDS[2]-1},
+        mins, maxs};  // 
 
     return gInfo;
 }
@@ -152,18 +180,84 @@ GridInfo generate_grid(const TopoDS_Shape& shape)
     return generate_grid(calcBoundBox(shape));
 }
 
+
+TopoDS_Shape merge_geometry(const TopoDS_Shape& s)
+{
+    auto tol = 1e-4; // set 0.0 to temporally disable fuzzy operation
+    TopTools_ListOfShape arguments;
+    TopTools_ListOfShape tools;
+    int count = 0;
+    for (TopExp_Explorer anExp(s, TopAbs_SOLID); anExp.More(); anExp.Next())
+    {
+        if (anExp.Current().IsNull())
+            throw OSD_Exception("one shape is null");
+        
+        if (count == 0)
+        {
+            if (tol > 0.0)
+                // workaround for http://dev.opencascade.org/index.php?q=node/1056#comment-520
+                arguments.Append(BRepBuilderAPI_Copy(anExp.Current()).Shape());
+            else
+                arguments.Append(anExp.Current());
+        }
+        else{
+            if (tol > 0.0)
+                // workaround for http://dev.opencascade.org/index.php?q=node/1056#comment-520
+                tools.Append(BRepBuilderAPI_Copy(anExp.Current()).Shape());
+            else
+                tools.Append(anExp.Current()); 
+        }
+        
+        count++;
+    }
+    if (count <= 1)
+        return s;
+
+    auto mkGFA = std::make_shared<BRepAlgoAPI_Fuse>();
+    mkGFA->SetRunParallel(false);
+    mkGFA->SetArguments(arguments);
+    mkGFA->SetTools(tools);
+    if (tol > 0.0)
+        mkGFA->SetFuzzyValue(tol);
+    mkGFA->SetNonDestructive(Standard_True);
+    mkGFA->SetUseOBB(true);
+    mkGFA->Build();
+    if (!mkGFA->IsDone())
+        throw OSD_Exception("General Fusion failed");
+
+    return mkGFA->Shape();
+}
+
+
 /// currently brep only, assuming single solid
 TopoDS_Shape read_geometry(std::string filename)
 {
-    // 2. image resolution, setup grid
     TopoDS_Shape shape;
-    BRep_Builder builder;
-    BRepTools::Read(shape, filename.c_str(), builder);
-    return shape;
+    if (filename.find(".brep") != std::string::npos or filename.find(".brp") != std::string::npos)
+    {
+        BRep_Builder builder;
+        BRepTools::Read(shape, filename.c_str(), builder);
+    }
+    else{
+        STEPControl_Reader aReader;
+        IFSelect_ReturnStatus stat = aReader.ReadFile(filename.c_str());
+
+        if (stat != IFSelect_RetDone)
+        {
+            throw std::runtime_error("step file read error for " + filename);
+        }
+
+        aReader.TransferRoots();   // translate all roots, return the number of transferred
+        shape = aReader.OneShape(); // a compound if there are more than one shapes
+    }
+    return merge_geometry(shape);
+
 }
 
+/// axis_id == 2 for rotating around Z-axis, axis_id = 0 for x-axis
 TopoDS_Shape  rotate_shape(const TopoDS_Shape& shape)
 {
+    // boundbox is only needed if USE_CUBE_BOX
     Bnd_Box bbox;
     BRepBndLib::Add(shape, bbox);
     double xmin, xmax, ymin, ymax, zmin, zmax;
@@ -172,18 +266,18 @@ TopoDS_Shape  rotate_shape(const TopoDS_Shape& shape)
     double yL=ymax-ymin;
     double zL=zmax-zmin;
 
+    int axis_id = 2;
+    const gp_Ax1 axes[] = {gp::OX(), gp::OY(), gp::OZ()};
+
     gp_Trsf trsf;
-    if(NORMALIZED_THICKNESS)
+    if( USE_CUBE_BOX ) 
     {
-        trsf.SetRotation(gp::OX(), M_PI/4.0);    // will rotation add up?
-        trsf.SetRotation(gp::OY(), M_PI/4.0);    
-        //trsf.SetRotation(gp::OZ(), M_PI/4.0);    
+        trsf.SetRotation(axes[axis_id], std::atan(zL/yL));
+        throw std::runtime_error("not impl");
     }
     else
     {
-        trsf.SetRotation(gp::OX(), std::atan(zL/yL));    
-        trsf.SetRotation(gp::OY(), std::atan(xL/zL));    
-        //trsf.SetRotation(gp::OZ(), std::atan(yL/xL)); 
+        trsf.SetRotation(axes[axis_id], M_PI/4.0);    // will rotation add up? NO
     } 
     auto t = BRepBuilderAPI_Transform(shape, trsf, true);
 
@@ -302,7 +396,7 @@ int calc_intersection(const std::vector<const Coordinate*> tri, const std::vecto
     gp_Vec    u, v, n;              // triangle vectors
     gp_Vec    w0, w;                // ray vectors
     scalar     r, a, b;              // params to calc ray-plane intersect
-    const scalar SMALL_NUM = 1e-30;    //
+    const scalar SMALL_NUM = 1e-12;    //
 
     // get triangle edge vectors and plane normal
     u = (*tri[1]) - (*tri[0]);
