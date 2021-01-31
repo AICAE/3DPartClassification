@@ -43,7 +43,7 @@ import os.path
 import json
 import numpy as np
 import pandas as pd
-from dataCollector import MechanicalOnly, dataset_metadata_filename, root_path
+from fclib_parameters import MechanicalOnly, dataset_metadata_filename, input_root_path
 
 #dataset_metadata_filename = "inputData.json"
 datafile = open(dataset_metadata_filename, "r")
@@ -72,7 +72,7 @@ if MechanicalOnly:
 else:
     outputData = data
 
-dataFullPath = root_path + outputData["path"] + os.path.sep + outputData["filename"] + "\n"
+dataFullPath = input_root_path + outputData["path"] + os.path.sep + outputData["filename"] + "\n"
 with open("datapathfile.txt", "w") as f:
     for fp in dataFullPath:
         f.write(fp)

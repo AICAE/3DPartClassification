@@ -7,17 +7,22 @@ import subprocess
 import shutil
 import glob
 
+INPUT_DATA_DIR = "/media/qxia/QingfengXia/AICAE_DataDir/"
 DATA_DIR="/mnt/windata/DataDir/"
 
-testing = True   # for debugging purpose
+testing = False   # for debugging purpose
 #dataset_name = "Thingi10K"       # all data in one folder, do not use, categorization not ideal
 dataset_name =  "ModelNet"       #  has two variants, modelnet10 and modelnet40
-isModelNet40 = False
+isModelNet40 = True
 #dataset_name = "FreeCAD_lib"   # Mechanical CAD part library
-dataset_name = "KiCAD_lib"       # ECAD KiCAD library
+#dataset_name = "KiCAD_lib"       # ECAD KiCAD library
+
+usingCubeBoundBox = False
+usingOBB = False
+usingXYZview = False
 
 usingKerasTuner = False
-usingMixedInputModel = True  # False: if use only image input
+usingMixedInputModel = True or not usingCubeBoundBox  # False: if use only image input
 
 generatingThicknessViewImage = True # also generate meta data for CAD geometry like step file
 usingOnlyThicknessChannel = False  # if False, use thickness and depth
@@ -42,11 +47,11 @@ if dataset_name == "Thingi10K":
 
     ##############################
     if testing:
-        root_path = "./testdata/testThingi10K_data"
-        output_root_path = root_path + "_output"
+        input_root_path = "./testdata/testThingi10K_data"
+        output_root_path = input_root_path + "_output"
         dataset_metadata_filename =  "testThingi10K_dataset.json"
     else:
-        root_path = DATA_DIR + "Thingi10K_dataset"
+        input_root_path = DATA_DIR + "Thingi10K_dataset"
         output_root_path = DATA_DIR + "Thingi10K_dataset_output"
         dataset_metadata_filename = "Thingi10K_dataset.json"
 
@@ -55,7 +60,7 @@ if dataset_name == "Thingi10K":
         metadata = {}
         if hasPerfileMetadata:
             # no needed for input format conversion
-            all_input_files = glob.glob(root_path  + os.path.sep  + "*." + metadata_suffix)
+            all_input_files = glob.glob(input_root_path  + os.path.sep  + "*." + metadata_suffix)
             #print(all_input_files)
         for input_file in all_input_files:
             #print("process metadata for input file", input_file)
@@ -83,18 +88,20 @@ elif dataset_name == "ModelNet":
 
     ##############################
     if testing:
-        root_path = "./testdata/testModelNet_data"
-        output_root_path = root_path  + "_output"
+        input_root_path = "./testdata/testModelNet_data"
+        output_root_path = input_root_path  + "_output"
         dataset_metadata_filename = "testModelNet_dataset.json"
     else:
-        if not  isModelNet40:
-            root_path = DATA_DIR + "ModelNet10"
-            output_root_path = DATA_DIR + "ModelNet10_output"
-            dataset_metadata_filename = "ModelNet10_dataset.json"
-        else:
-            root_path = DATA_DIR + "ModelNet40"
-            output_root_path = DATA_DIR + "ModelNetr40_output"
+        if isModelNet40:
+            input_root_path = INPUT_DATA_DIR + "ModelNet40"
+            output_root_path = INPUT_DATA_DIR + "ModelNet40_output"
+            dataset_dir_path = DATA_DIR + "ModelNet40_output"
             dataset_metadata_filename = "ModelNet40_dataset.json"
+        else:
+            input_root_path = DATA_DIR + "ModelNet10"
+            output_root_path = DATA_DIR + "ModelNet10_output"
+            dataset_dir_path = output_root_path
+            dataset_metadata_filename = "ModelNet10_dataset.json"
 
 elif dataset_name == "KiCAD_lib":
     isMeshFile = False
@@ -102,12 +109,13 @@ elif dataset_name == "KiCAD_lib":
     supported_input_file_suffices = set(["stp", "step"])
     input_file_suffix = "step"
     if testing:
-        root_path = "./testdata/testKiCAD_data"
-        output_root_path = root_path + "_output"
+        input_root_path = "./testdata/testKiCAD_data"
+        output_root_path = input_root_path + "_output"
         dataset_metadata_filename = "testKiCAD_dataset.json"
     else:
-        root_path = DATA_DIR + "kicad-packages3D"
-        output_root_path = DATA_DIR + "kicad-packages3D_output"
+        input_root_path = INPUT_DATA_DIR + "kicad-packages3D"
+        output_root_path = INPUT_DATA_DIR + "kicad-packages3D_output"
+        dataset_dir_path = DATA_DIR + "kicad-packages3D"
         dataset_metadata_filename = "kicad-packages3D_dataset.json"
     
     def isValidSubfolder(dir):
@@ -141,7 +149,7 @@ if isMeshFile:
         info = fcMeshPreprocessor.generateMetadata(input)
         with open(json_file_path, "w") as outfile:
             json.dump(info, outfile)
-            print(json_file_path)
+            print("generated metadata file: ", json_file_path)
         return info
 
     # meshio, MeshLab  can also convert mesh from .off to .stl
@@ -149,7 +157,9 @@ if isMeshFile:
         cmd = ["meshio-convert", input, output]
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, error = p.communicate()
-        print(out, error)
+        if p.returncode != 0:
+            print("failed to convert ", input, str(out), str(error))
+        return p.returncode == 0
 
 
 ###############view app output control ############
@@ -209,15 +219,18 @@ else:
 #########################################################################################
 ########### output control #########
 if testing:
+    dataset_dir_path = output_root_path
     if os.path.exists(output_root_path):
         os.system("rm -rf {}".format(output_root_path))  # this is not portable, posix only
 if not os.path.exists(output_root_path):
     os.makedirs(output_root_path)
+if not os.path.exists(dataset_dir_path):
+    os.makedirs(dataset_dir_path)
 # it is better to output to another folder but keep folder structure, for easy clean up
 dataset_metadata_filepath = output_root_path + os.path.sep + dataset_metadata_filename
 
 
-processed_metadata_filepath = output_root_path + os.path.sep + "processed_" + dataset_metadata_filename
+processed_metadata_filepath = dataset_dir_path + os.path.sep + "processed_" + dataset_metadata_filename
 if compressingImage:
     _processed_imagedata_filename = "compressed_imagedata.npy"
 else:
@@ -226,7 +239,10 @@ else:
 if not concatingImage:
     _processed_imagedata_filename = "nview_" + _processed_imagedata_filename
 
-processed_imagedata_filepath = output_root_path + os.path.sep + _processed_imagedata_filename
+if usingCubeBoundBox:
+    _processed_imagedata_filename = "cubebox_" + _processed_imagedata_filename    
+
+processed_imagedata_filepath = dataset_dir_path + os.path.sep + _processed_imagedata_filename
 
 ######################################################################################
 ## saved model file to continue model fit

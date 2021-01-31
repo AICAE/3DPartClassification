@@ -4,12 +4,14 @@
 """
 
 
-_is_debug = False
+_debug = False
 _using_saved_model = True # 
-usingKerasTuner = True
+
 
 BATCH_SIZE = 100  # if dataset is small, make this bigger
-EPOCH_COUNT = 150
+EPOCH_COUNT = 200
+INIT_LEARN_RATE = 1e-4  # batch_normalization needs a slightly bigger learning rate
+RESTART_LR = INIT_LEARN_RATE * 0.1
 
 import numpy as np
 import pandas as pd
@@ -21,7 +23,7 @@ import tempfile
 
 from input_parameters import dataset_name, model_input_shape, channel_count, thickness_channel, \
     processed_metadata_filepath, processed_imagedata_filepath, saved_model_file, \
-    usingOnlyThicknessChannel, usingMixedInputModel
+    usingOnlyThicknessChannel, usingMixedInputModel, usingKerasTuner
 from stratify import my_split
 
 # before import tensorflow
@@ -38,7 +40,7 @@ tf.get_logger().setLevel('ERROR')
 my_devices = tf.config.experimental.list_physical_devices(device_type='CPU')
 tf.config.experimental.set_visible_devices(devices= my_devices, device_type='CPU')
 
-if _is_debug:
+if _debug:
     tf.debugging.experimental.enable_dump_debug_info(
         tempfile.gettempdir() + os.path.sep + dataset_name + "_logdir",
         tensor_debug_mode="FULL_HEALTH",
@@ -186,7 +188,7 @@ else:
 
 
 ###################################
-if _is_debug: 
+if _debug: 
     print(list(df.columns))
 
 # partition the data into training and testing splits using 75% of
@@ -202,7 +204,7 @@ print("[INFO] split data...")
 trainY = pd.DataFrame(trainDataset, columns = [LABEL])
 testY = pd.DataFrame(testDataset, columns = [LABEL])
 
-if _is_debug:
+if _debug:
     print("trainDataset ", trainDataset.shape, trainDataset)
     print("testDataset ", testDataset.shape, testDataset)
 
@@ -219,7 +221,7 @@ total_classes = trainY.shape[1]
 # WARN: group size is too small to split, skip this group
 
 print("[INFO] trainY shape by one-hot encoding ", trainY.shape)
-if _is_debug:
+if _debug:
     print("testY with one-hot encoding ", testY.shape, testY)
 
 
@@ -232,6 +234,10 @@ testAttrX = pd.DataFrame(testDataset, columns = FEATURES)
 
 ##########################################
 ## auto checkpoint save?
+
+# EarlyStopping for prevent overfitting
+early_stop_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=10, verbose=2)
+
 # keras.callbacks.ModelCheckpoint
 checkpoint_filepath = tempfile.tempdir + '/tf_checkpoint'
 model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
@@ -252,8 +258,10 @@ signal.signal(signal.SIGINT, keyboardInterruptHandler)
 print("[INFO] model input image shape, and images shape", model_input_shape, imageShape)
 model_settings = { "total_classes": total_classes, "usingMixedInputs": usingMixedInputModel,
                     "image_width": model_input_shape[-3], "regress": False}
-opt = Adam(lr=1e-4, beta_1=0.7, decay=1e-5 / 200)  # lr: learning rate from 1e-3 decrease to -5
 
+# LearningRate = LearningRate * 1/(1 + decay * epoch)
+#opt = Adam(learning_rate=INIT_LEARN_RATE, beta_1=0.7, decay=50/EPOCH_COUNT)
+opt = Adam(lr=INIT_LEARN_RATE, beta_1=0.7, decay=1e-5 )  #  1e-5 / 200
 
 if usingKerasTuner:
     print("[INFO] use keras tuner")
@@ -268,7 +276,7 @@ if usingKerasTuner:
         build_model,
         objective='val_accuracy',
         max_epochs=30,  # can that based on a pretrained model?
-        hyperband_iterations=2)
+        hyperband_iterations=4)
 
     # TODO: error: ValueError: Layer model_1 expects 2 input(s), but it received 3 input tensors.
     tuner.search([trainAttrX, trainImagesX], trainY,
@@ -299,7 +307,7 @@ else:
     # https://www.tensorflow.org/api_docs/python/tf/keras/callbacks/LearningRateScheduler
     from tensorflow.keras import backend as K
     print("Learning rate before second fit:", model.optimizer.learning_rate.numpy())
-    K.set_value(model.optimizer.learning_rate, 0.000001)
+    K.set_value(model.optimizer.learning_rate, RESTART_LR)
 
 
     # init the weight values
@@ -344,15 +352,15 @@ else:
         preds = model.predict(testImagesX)
         results = model.evaluate(testImagesX, testY, batch_size=128)
 
-    print("test loss, test acc:", results)
+    print("[INFO] test loss, test acc:", results)
 
     # compute the difference between the *predicted*  and the *actual*  
     # # then compute the percentage difference 
 
-    # 
-    diff = preds - testY
-    percentDiff = np.sum(np.sum(np.abs(diff)) / np.sum(testY)) * 100
-    absPercentDiff = np.abs(percentDiff)
-    print("[INFO] validate prediction by test data, error percentage is: ", absPercentDiff)
+    # this is twice of loss evaluation
+    # diff = preds - testY
+    # percentDiff = np.sum(np.sum(np.abs(diff)) / np.sum(testY)) * 100
+    # absPercentDiff = np.abs(percentDiff)
+    # print("[INFO] validate prediction by test data, error percentage is: ", absPercentDiff)
 
     #########################################

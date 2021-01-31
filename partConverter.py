@@ -3,6 +3,7 @@
 # FCStd format bearing is too complicated to select (sometime only final visiable is needed) and export
 
 import sys
+import os.path
 
 from detect_freecad import append_freecad_mod_path
 
@@ -33,13 +34,13 @@ def convert(input, output):
     objs = []
     # todo: recursive inclusion part is not yet supported
     for obj in App.ActiveDocument.RootObjects:
-        if obj.isDerivedFrom("Part::Feature") and obj.Visibility:
+        if obj.isDerivedFrom("Part::Feature"):  # and obj.Visibility
             objs.append(obj)
         if obj.isDerivedFrom("App::Part"):  # for step imported assembly
             objs.append(obj)
-        if obj.isDerivedFrom("Part::FeaturePython") and obj.Visibility:
+        if obj.isDerivedFrom("Part::FeaturePython"): # and obj.Visibility
             objs.append(obj)
-        if obj.isDerivedFrom("PartDesign::Part")  and obj.Visibility: 
+        if obj.isDerivedFrom("PartDesign::Part"): # and obj.Visibility
             objs.append(obj)
     Part.export(objs, output)
     del objs
@@ -50,7 +51,7 @@ def test_convert():
     #output = "./testdata/test_screw.step"
     #convert(input, output)
     #assert os.path.exists(output)
-    step_input = "./testdata/test_rod.step"
+    step_input = "./testdata/testFreeCAD_lib_data/test_rod.step"
     brep_output = step_input.replace(".step", ".brep")
     convert(step_input, brep_output)
     assert os.path.exists(brep_output)

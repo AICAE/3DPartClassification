@@ -29,8 +29,8 @@ image_height = 480
 
 ################# IO path #################
 if testing:
-    root_path = "./testdata/testFreeCAD_lib"
-    output_root_path = root_path + "_output"
+    input_root_path = "./testdata/testFreeCAD_lib"
+    output_root_path = input_root_path + "_output"
     dataset_metadata_filename =  output_root_path + "/test_data.json"
 else:
     output_root_path = "/mnt/windata/MyData/freecad_library_output"
@@ -38,10 +38,10 @@ else:
         os.makedirs(output_root_path)
 
     if MechanicalOnly:
-        root_path = "/mnt/windata/MyData/FreeCAD-library/Mechanical Parts"
+        input_root_path = "/mnt/windata/MyData/FreeCAD-library/Mechanical Parts"
         dataset_metadata_filename = "mechdata.json"
     else:
-        root_path = "/mnt/windata/MyData/FreeCAD-library"
+        input_root_path = "/mnt/windata/MyData/FreeCAD-library"
         dataset_metadata_filename = "alldata.json"
 
 
