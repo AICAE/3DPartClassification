@@ -3,12 +3,46 @@
 
 ---
 
-https://github.com/yinyunie/3D-Shape-Analysis-Paper-List#shape-representation
+## Innovation
++ new 3D dataset
++ new preprocessor: thickness map
++ new deep learning network:  XrayNet
++ faster for better preprocessor , more info per image
++ new application of 3D classification
 
-https://github.com/tobiagru/Deep-3D-Obj-Recognition
+## Literature view of existing models
 
-https://github.com/dimatura/voxnet
-Shapenet from voxel to thickness,
+
+see another md doc
+
+## Dataset
+
+### Tensorflow has ShapeNet ModelNet40
+
+https://www.tensorflow.org/graphics/api_docs/python/tfg/datasets/shapenet/Shapenet
+
+Aligined ModelNet40 dataset
+https://github.com/lmb-freiburg/orion
+
+#### freecad library dataset
+filter out category that has too smaller item. Actually, it has been done auto by tensorflow
+> WARN: group size is too small to split, skip this group
+
+fc_lib has only 3 groups for mechdata
+
+`tensorboard --logdir logs/scalars`  will plot the epoch_loss 
+
+### Electronics 3D parts fork KiCad
+
+https://github.com/KiCad/kicad-packages3D/tree/master/Crystal.3dshapes
+https://kicad.github.io/packages3d/
+
+STEP and WRL
+WRL files are an extension of the Virtual Reality Modeling Language (VRML) format .
+
+why? classification and match to setup simulation
+
+
 
 ## Workflow
 
@@ -20,35 +54,64 @@ Shapenet from voxel to thickness,
    partConverter.py: use FreeCAD python API to convert step into brep
    OccQt: generate geometry metadata and dump views into images
 
-2. `dataCollector.py`  
+3. `dataCollector.py`  
    resize and merge images (opencv2) into numpy.array 
    json meta files into pandas DF
 
-3. `partClassify.py`: TensorFlow model mixed data (images, category data)
+4. `partClassify.py`: TensorFlow model mixed data (images, category data)
 
-### debug tensorflow
+5. post processing plot
 
-https://www.tensorflow.org/tensorboard/debugger_v2
+## Todo
 
-`tf.debugging.enable_check_numerics`
+### image resolution + one more view
+60X60, so random padding, 
+plot_views
 
-`tf.get_logger().setLevel('INFO')`
+do not normalize bbox to cube
 
-#### freecad library dataset
-filter out category that has too smaller item. Actually, it has been done auto by tensorflow
-> WARN: group size is too small to split, skip this group
 
-fc_lib has only 3 groups for mechdata
+MVCNN got running
+SPnet:  is also very fast, small in trainable parameter, 30K
+pairwise: 
 
-`tensorboard --logdir logs/scalars`  will plot the epoch_loss 
+### Rotated view
 
-#### thingi10k dataset
+debug
 
-`Subcategory` each cat is too smaller,
-while `Category`
-152/152 [==============================] - 18s 117ms/step - loss: 3.9862 - accuracy: 0.0250 - val_loss: 3.9852 - val_accuracy: 0.0280
+### ModelNet40
 
-### improve accuracy
+## improve accuracy
+
+### Tuner
+
+https://blog.tensorflow.org/2020/01/hyperparameter-tuning-with-keras-tuner.html
+
+#### Conv2D(filters) choose filters number
+
+[](https://stackoverflow.com/questions/52447345/choosing-conv2d-filters-value-to-start-off-with/52448264)
+16 or 32 is fine.  for input image size of 200X200
+
+The filters in the first few layers are usually less abstract and typically emulates edge detectors, blob detectors etc. You generally don't want too many filters applied to the input layer as there is only so much information extractable from the raw input layer. Most of the filters will be redundant if you add too many. You can check this by pruning (decrease number of filters until your performance metrics degrade)
+
+
+Hyperparameter    |Value             |Best Value So Far 
+units             |16                |16                
+filters_0         |16                |24                
+filters_1         |48                |48                
+filters_2         |128               |96                
+dropout           |0                 |0.4               
+tuner/epochs      |2                 |2                 
+tuner/initial_e...|0                 |0                 
+tuner/bracket     |3                 |3                 
+tuner/round       |0                 |0     
+
+
+Optuna 是一个特别为机器学习设计的自动超参数优化软件框架。
+
+Introduction to the Keras Tuner
+https://www.tensorflow.org/tutorials/keras/keras_tuner
+
 
 [The History Began from AlexNet: A Comprehensive Survey on Deep Learning Approaches]
 > 2012 the error for AlexNet model using ImageNet data is 16.4%
@@ -57,19 +120,36 @@ while `Category`
 2. use different image generator!
 3. numeric parameters
 
+
+look at multiple view AI model, for CNN setup
+
+thickness project,  do not scale the view, use orginal aspect ratio
+due to different orientation, some part has different contacted images.
+OBB. 
+
+64X64 is more than enough, try 32, yes now possible
+ModelNet data subset is usable now. 
+
+
 ### Data augmentation to prevent overfitting 
 
-https://my.oschina.net/u/4067628/blog/4767106
-flip,  must have
-在 OpenCV 中 flip 函数的参数有 1 水平翻转、0 垂直翻转、-1 水平垂直翻转三种。 
+**Data Augmentation** is a method of artificially creating a new dataset for training from the existing training dataset to improve the performance of deep learning neural networks with the amount of data available.
 
-shift: change edge
-rotate,  not necessary oriented
+`Model.fit_generator()` is used when either we have a huge dataset to fit into our memory or when data augmentation needs to be applied.
+
+https://my.oschina.net/u/4067628/blog/4767106
++ flip,  must have
+在 OpenCV 中 flip 函数的参数有 1 水平翻转、0 垂直翻转、-1 水平垂直翻转三种。 
+Tensorflow has experimental data augmentation layer for flip and rotate
+
++ shift: padding
+
++ rotate,  not necessary for oriented shape
 ```py
 cv2.getRotationMatrix2D((center_x, center_y) , angle, 1.0)newimg = cv2.warpAffine(img, rotMat, (width, height))
 newimg = cv2.warpAffine(img, rotMat, (width, height))
 ```
-noise:
++ noise:
 
 
 https://www.pyimagesearch.com/2019/02/04/keras-multiple-inputs-and-mixed-data/
@@ -92,44 +172,27 @@ train_generator = train_dataGen.flow_from_dataframe(
                                         batch_size=32)
 ```
 
+## Preprocessor
 
-### Geometrical properties: generated by occQt
+### Geometrical properties: generated by occQt/OCCT, FreeCAD
 name of the part
 solid count
 characteristics length, 2 length ratios. OBB  boundbox
 volume/boundbox_volume
 volume, area, perimeter,
 
-## occQt:  image generation from geometry view
+### Multi-view render occQt/VTK/Blender
+
 
 views are orth, along OBB
 
 
-## Image compression: done in C++
-cppyy `imagePreprocessing.py`
-image size, for assembly level product like bearing, or complex part like gear
+训练网络的时候用的是voxel grids格式的数据，shapeNet提供了32×32×32的grid数据以及grid数据相应渲染的结果，链接：（Index of /data2），里面grid数据是用.binvox格式存储的，python的读取示例（dimatura/binvox-rw-py），如果想要将mesh数据体素化，可以用 mesh-voxelization工具(FairyPig/mesh-voxelization)。
 
-bolt are standard, geometry hashing ()
-surface uid + collisionType matrix, can be used to merge in parallel.
-surface uid, first bit are solid uid
+### Xray/thickness map: occProjector/vtk
 
-how to check deadlock
-
-random shake, pixpix
-square pixels block, instead of line
-image compressing 4, 8X8 (unit64_t -> double/float32 [0, 1] or [-1, 1]),  also avoid pooling
-normalized to float32 or float64
-
-G-function, C to accelerate
-
-## deep learning model
-mixed image and data input
-flatten vertical, horizontal?
-visual of tensor flow
-
-## tensorflow test data
-MNIST, 28X28 pixel grayscale
-
+VTK raycast
+vtkMassProperties Class Reference:  `Volume` and `SurfaceArea`
 
 
 ## comparison study
@@ -138,9 +201,6 @@ MNIST, 28X28 pixel grayscale
 
 bit compression, 
 
-###  wireframe or normal for topology recognition
-
-can be done,
 
 ### different image resolution, 
 
@@ -153,7 +213,3 @@ scale to aspect ratio 1:1
 ### using geometry meta data only or images only
 
 
-## Conclusion
-
-
-## References
