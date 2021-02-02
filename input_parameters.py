@@ -7,28 +7,7 @@ import subprocess
 import shutil
 import glob
 
-INPUT_DATA_DIR = "/media/qxia/QingfengXia/AICAE_DataDir/"
-DATA_DIR="/mnt/windata/DataDir/"
-
-testing = False   # for debugging purpose
-#dataset_name = "Thingi10K"       # all data in one folder, do not use, categorization not ideal
-dataset_name =  "ModelNet"       #  has two variants, modelnet10 and modelnet40
-isModelNet40 = False
-#dataset_name = "FreeCAD_lib"   # Mechanical CAD part library
-#dataset_name = "KiCAD_lib"       # ECAD KiCAD library
-
-usingCubeBoundBox = False
-usingOBB = False
-usingXYZview = False
-
-usingKerasTuner = False
-usingMixedInputModel = False or not usingCubeBoundBox  # False: if use only image input
-
-generatingThicknessViewImage = True # also generate meta data for CAD geometry like step file
-usingOnlyThicknessChannel = False  # if False, use thickness and depth
-channel_count = 2 if generatingThicknessViewImage else 1
-channel_count = 1 if usingOnlyThicknessChannel else channel_count
-thickness_channel = 1  # second channel
+from global_config import *
 
 generatingMultiViewImage = not generatingThicknessViewImage  # deprecated
 usingGrayscaleImage = not generatingThicknessViewImage
@@ -255,6 +234,8 @@ if dataset_name == "ModelNet":
 
 if usingMixedInputModel:
     _saved_model_name = "mixed_input_" +  _saved_model_name
+else:
+    _saved_model_name = "image_only_" +  _saved_model_name    
 
 if generatingMultiViewImage:
     _saved_model_name = "multiview_" +  _saved_model_name

@@ -26,28 +26,36 @@ class TDModel(object):
         self.total_classes = s["total_classes"]
         self.usingMixedInputs = s["usingMixedInputs"]
         self.image_width = s["image_width"]
+        self.usingMaxViewPooling = s["usingMaxViewPooling"]
 
         if hp:
-            self.mlp_dense_p = hp.Int('units', min_value = 8, max_value = 32, step = 8)
+            self.mlp_dense_p = 16 # hp.Int('units', min_value = 16, max_value = 32, step = 8)
             self.local_feature_count = 64
             self.cnn_filters=[]
             if self.image_width <=64:
                 bf = (16, 32, 64)
             for i,w in enumerate(bf):
                 self.cnn_filters.append(hp.Int('filters_' + str(i), w, w*2, step=w//2))
-            self.second_out_dense_p = hp.Int('filters_' + str(i), 128, 512, step=128)
-            self.out_dense_p = hp.Int('filters_' + str(i), 128, 512, step=128)
-            self.cnn_dense_dropout_p = hp.Float('dropout', 0, 0.6, step=0.1, default=0.5)
+            self.pre_out_dense_p = hp.Int('preout_dense', 128, 512, step=128)
+            self.out_dense_p = hp.Int('out_dense', 128, 512, step=128)
+            self.cnn_dense_dropout_p = 0.4 # hp.Float('dropout', 0.2, 0.6, step=0.2, default=0.4)
         else:
-            self.mlp_dense_p = 8
+            # modelnet10 Jan25, 0.91
+            # self.mlp_dense_p = 16
+            # self.local_feature_count = 64
+            # self.cnn_filters=(24, 48, 64)
+            # self.pre_out_dense_p = 384 # layer before output Dense layer
+            # self.out_dense_p = 256
+            # self.cnn_dense_dropout_p = 0.6
+
+            # Jan 21, Acc = 0.92 in 1000 epochs
+            self.mlp_dense_p = 16
             self.local_feature_count = 64
             self.cnn_filters=(16, 32, 64)
-            self.second_out_dense_p = 256  # layer before output Dense layer
+            self.pre_out_dense_p = 256 # layer before output Dense layer
             self.out_dense_p = 256
             self.cnn_dense_dropout_p = 0.6
 
-
-        self.usingMaxViewPooling = False
         self.usingDataAugmentation = True
         self.usingBatchNormal = True
         self.regress=s["regress"]
@@ -140,7 +148,7 @@ class TDModel(object):
         # view pooling
         x = self.view_pooling(view_pool)
 
-        x = Dense(self.second_out_dense_p, activation='relu')(x)
+        x = Dense(self.pre_out_dense_p, activation='relu')(x)
         #x = Activation("relu")(x)
         x = Dropout(self.cnn_dense_dropout_p)(x)
 
@@ -150,6 +158,7 @@ class TDModel(object):
 
         # apply another FC layer, this one to match the number of classes
         if not self.usingMixedInputs:
+            x = Dense(self.out_dense_p, activation="relu")(x)
             x = Dense(self.total_classes, activation="softmax")(x)
 
         # check to see if the regression node should be added
