@@ -4,12 +4,11 @@
 """
 
 
-_debug = False
+_debug = True
 _using_saved_model = True # 
 
-
 BATCH_SIZE = 100  # if dataset is small, make this bigger
-EPOCH_COUNT = 200
+EPOCH_COUNT = 10
 INIT_LEARN_RATE = 1e-4  # batch_normalization needs a slightly bigger learning rate
 RESTART_LR = INIT_LEARN_RATE * 0.1
 
@@ -21,32 +20,37 @@ import os
 import json
 import tempfile
 
+
 from input_parameters import dataset_name, model_input_shape, channel_count, thickness_channel, \
     processed_metadata_filepath, processed_imagedata_filepath, saved_model_file, \
-    usingOnlyThicknessChannel, usingMixedInputModel, usingKerasTuner
+    usingOnlyThicknessChannel, usingMixedInputModel, usingKerasTuner, usingMaxViewPooling
 from stratify import my_split
 
 # before import tensorflow
 import logging
-logging.getLogger("tensorflow").setLevel(logging.ERROR)
+#logging.getLogger("tensorflow").setLevel(logging.ERROR)
 
 # import the necessary packages
 import tensorflow
 from tensorflow.keras.utils import to_categorical
 import tensorflow as tf
-tf.get_logger().setLevel('ERROR')
+if _debug:
+    tf.get_logger().setLevel('DEBUG')
+else:
+    tf.get_logger().setLevel('ERROR')
 
 # Set CPU as available physical device
 my_devices = tf.config.experimental.list_physical_devices(device_type='CPU')
 tf.config.experimental.set_visible_devices(devices= my_devices, device_type='CPU')
 
 if _debug:
-    tf.debugging.experimental.enable_dump_debug_info(
-        tempfile.gettempdir() + os.path.sep + dataset_name + "_logdir",
+    tf_debug_dir = tempfile.gettempdir() + os.path.sep + dataset_name + "_logdir"
+    tf.debugging.experimental.enable_dump_debug_info(tf_debug_dir,
         tensor_debug_mode="FULL_HEALTH",
         circular_buffer_size=-1)
-    # after running the model: run `tensorboard --logdir /tmp/tfdbg2_logdir`
     # NO_TENSOR, CURT_HEALTH, CONCISE_HEALTH, FULL_HEALTH
+    print("    # after running the model, run:     tensorboard --logdir ", tf_debug_dir)
+
 
 
 from tensorflow.keras.layers import Dense
@@ -73,7 +77,7 @@ print("[INFO] loading classification data in metadata file")
 df = pd.read_json(processed_metadata_filepath)
 
 images = np.load(processed_imagedata_filepath)  # pickle array of object type: allow_pickle=True
-print("[INFO] loaded images ndarray shape from file", images.shape)
+print("[INFO] loaded images ndarray shape from file", images.shape, images.dtype)
 
 if len(images.shape) == 5:
     if usingOnlyThicknessChannel:
@@ -121,15 +125,18 @@ if bbox.shape[1] == 6:
 if bbox.shape[1] == 3:
     obb = bbox
 
+# there is obb length are zeros, lead to bbox_volume to zero.
+#print(obb<=0)
 assert((obb > 0).all())
+
 
 ## debug print out obb sorting
 #print(obb.shape, obb.dtype, obb[1])
 #print(obb[0])
 obb.sort(axis=1)  # return None, inplace sort,  ascending order
-#print(obb[0])
+#print(obb[0]),   # obb max is too big, why?
 df["bbox_max_length"] = obb[:,2]
-bbox_volume = np.prod(obb)
+bbox_volume = np.prod(obb, axis=1)
 df["volume_bbox_ratio"] = df["volume"]/bbox_volume
 #print(df["bbox_max_length"])
 
@@ -183,7 +190,7 @@ else:
     # inverse_transform() to get string back
     catEncoder = LabelEncoder()
     cat = catEncoder.fit_transform(df[CATEGORY_LABEL])
-    print("label category encoded as integer: ", type(cat), cat.shape, cat.dtype)  #ndarray of integer
+    print("label category encoded as integer: ", type(cat), cat.shape, cat.dtype)  # ndarray of integer
     df[LABEL] = cat
 
 
@@ -199,7 +206,11 @@ print("[INFO] split data...")
 #split = train_test_split(df, images, test_size=0.25, random_state=42)
 #(trainDataset, testDataset, trainImagesX, testImagesX) = split
 
-(trainDataset, testDataset, trainImagesX, testImagesX) = my_split(df, images, LABEL)
+if dataset_name == "ModelNet":
+    train_folder_name="train"
+else:
+    train_folder_name=None
+(trainDataset, testDataset, trainImagesX, testImagesX) = my_split(df, images, LABEL, train_folder_name=train_folder_name)
 
 trainY = pd.DataFrame(trainDataset, columns = [LABEL])
 testY = pd.DataFrame(testDataset, columns = [LABEL])
@@ -257,6 +268,7 @@ signal.signal(signal.SIGINT, keyboardInterruptHandler)
 ##########################################
 print("[INFO] model input image shape, and images shape", model_input_shape, imageShape)
 model_settings = { "total_classes": total_classes, "usingMixedInputs": usingMixedInputModel,
+                    "usingMaxViewPooling": usingMaxViewPooling,
                     "image_width": model_input_shape[-3], "regress": False}
 
 # LearningRate = LearningRate * 1/(1 + decay * epoch)
@@ -298,8 +310,11 @@ else:
         model = TDModel(model_settings).create_model(im_shape = model_input_shape, mlp_shape = trainAttrX.shape)
 
         # the loss functions depends on the problem itself, for multiple classification 
-        model.compile(loss="categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
-        # todo: sparse_categorical_crossentropy
+        if True:
+            model.compile(loss="categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
+        else:
+            model.compile(loss="sparse_categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
+            # sparse_categorical_crossentropy is for large class count, also needs to change label encoder?
 
     #########################################
 
@@ -328,8 +343,8 @@ else:
     #####################################
     # save the model and carry on model fit in a second run
     # https://www.tensorflow.org/guide/keras/save_and_serialize
-    model.save(saved_model_file)
-
+    model.save(saved_model_file, save_format='h5')
+    # save_format='h5' is fine if tf.debugging is enabled, for some dtype cause error for save_format = 'tf'.
 
     # convert the history.history dict to a pandas DataFrame:
     import pandas as pd 

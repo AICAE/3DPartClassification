@@ -4,12 +4,15 @@ https://vict0rs.ch/2018/05/24/sample-multilabel-dataset/
 
 """
 
-def my_split(df, images, class_col_name, ratio=0.8, shuffling=True):
+def my_split(df, images, class_col_name, train_folder_name = None, ratio=0.8, shuffling=True):
     """
     parameters:
         df: pandas.DataFrame
         images: numpy.ndaray, has the same order as df
         class_col_name: df column name for the target in classification
+        train_folder_name: None,  can be "train", subcategories (file path) contain this word is train samples
+        ratio: 0.8 
+
     return:
         train, train_images, test, test_images
     """
@@ -30,18 +33,31 @@ def my_split(df, images, class_col_name, ratio=0.8, shuffling=True):
         group_data = df[df[class_col_name] == val]
         # shuffling?
         group_size = group_data.shape[0]
-        train_size = int(group_size * ratio)
-        print("group name = {}, group size = {}, train_size={}".format(val, group_size, train_size))
-        if train_size >= 1 and group_size > 10:
-            if gi == 0:
-                train = group_data.iloc[:train_size]
-                test = group_data.iloc[train_size:]
+        if train_folder_name:
+            # conversion from dtype of object of list
+            train_g = []
+            test_g = []
+            for i, v in group_data["subcategories"].iteritems():
+                if v == [train_folder_name]:
+                    train_g.append(i)
+                else:
+                    test_g.append(i)
+            train = pd.concat([train, df.iloc[train_g, :]])
+            test = pd.concat([test, df.iloc[test_g, :]])
+        else: # using ratio is split
+            train_size = int(group_size * ratio)
+            print("group name = {}, group size = {}, train_size={}".format(val, group_size, train_size))
+            if train_size >= 1 and group_size > 10:
+                if gi == 0:
+                    train = group_data.iloc[:train_size]
+                    test = group_data.iloc[train_size:]
+                else:
+                    train = train.append(group_data.iloc[:train_size])  # generate a new DF,  python list
+                    test = test.append(group_data.iloc[train_size:])  # append will generat a new DF
+                gi += 1
             else:
-                train = train.append(group_data.iloc[:train_size])  # generate a new DF,  python list
-                test = test.append(group_data.iloc[train_size:])  # append will generat a new DF
-            gi += 1
-        else:
-            print("WARN: group size is too small to split, skip this group")
+                print("WARN: group size is too small to split, skip this group")
+    
     print(train.columns, train.shape)
     if shuffling:
         train = train.sample(frac=1).reset_index(drop=True)
