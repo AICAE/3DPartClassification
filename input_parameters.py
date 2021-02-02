@@ -13,7 +13,7 @@ DATA_DIR="/mnt/windata/DataDir/"
 testing = False   # for debugging purpose
 #dataset_name = "Thingi10K"       # all data in one folder, do not use, categorization not ideal
 dataset_name =  "ModelNet"       #  has two variants, modelnet10 and modelnet40
-isModelNet40 = True
+isModelNet40 = False
 #dataset_name = "FreeCAD_lib"   # Mechanical CAD part library
 #dataset_name = "KiCAD_lib"       # ECAD KiCAD library
 
@@ -22,7 +22,7 @@ usingOBB = False
 usingXYZview = False
 
 usingKerasTuner = False
-usingMixedInputModel = True or not usingCubeBoundBox  # False: if use only image input
+usingMixedInputModel = False or not usingCubeBoundBox  # False: if use only image input
 
 generatingThicknessViewImage = True # also generate meta data for CAD geometry like step file
 usingOnlyThicknessChannel = False  # if False, use thickness and depth
@@ -133,6 +133,7 @@ else:
 
 if generatingThicknessViewImage:
     output_root_path = output_root_path + "_thickness"
+    dataset_dir_path = dataset_dir_path + "_thickness"
 
 ##########################
 # preprocessing  meshlib meshed part dataset_metadata_filename
@@ -217,13 +218,12 @@ else:
     model_input_shape = [view_count, model_input_height, model_input_width, channel_count]
 
 #########################################################################################
-########### output control #########
+########### dataset save control #########
 if testing:
     dataset_dir_path = output_root_path
     if os.path.exists(output_root_path):
         os.system("rm -rf {}".format(output_root_path))  # this is not portable, posix only
-if not os.path.exists(output_root_path):
-    os.makedirs(output_root_path)
+
 if not os.path.exists(dataset_dir_path):
     os.makedirs(dataset_dir_path)
 # it is better to output to another folder but keep folder structure, for easy clean up
@@ -264,7 +264,7 @@ else:
     else:
         _saved_model_name = "DT_" +  _saved_model_name
 
-saved_model_file = output_root_path + os.path.sep + _saved_model_name
+saved_model_file = dataset_dir_path + os.path.sep + _saved_model_name
 
 
 modelnet40_classes = ['airplane','bathtub','bed','bench','bookshelf','bottle','bowl','car','chair',

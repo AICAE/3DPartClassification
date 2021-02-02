@@ -6,13 +6,16 @@ import multiprocessing
 import subprocess
 from collections import OrderedDict
 
-
+_debug = True
 using_threading = True  # false, can help debugging
+regenerating_images = True
 resumable = True  # carry on work left, Registry can not resume for the time being
 existing_dataset = {}
 
 from input_parameters import *
 
+if not os.path.exists(output_root_path):
+   os.makedirs(output_root_path)
 
 if using_threading:
     from concurrent.futures import ThreadPoolExecutor
@@ -28,10 +31,16 @@ nb_processed = 0
 def get_filename_stem(input_filename):
     return input_filename[:input_filename.rfind(".")]
 
-def generate_view_cmd(is_thickness, input_filename, output_filepath_stem):
+def generate_view_cmd(is_thickness, input_filename, output_filepath_stem, info):
     # depends on input_parameter.py
     if is_thickness==True:
         args = ["--grid", str(im_width), str(im_width), str(im_width)]   #  + ["--bop"]
+        if usingCubeBoundBox:
+            args.append("--cube")
+        if usingOBB:
+            args.append("--obb")
+        if usingXYZview:
+            args.append("--xyz")
         if isMeshFile:
             assert info
             args += ["--bbox"] + [ str(v) for v in info["bbox"]] 
@@ -57,7 +66,7 @@ def generate_view_images(input_filename, is_thickness=True, working_dir=None, in
     assert(os.path.exists(working_dir))
     #print(input_filename, working_dir)
 
-    cmd = generate_view_cmd(is_thickness, input_filename, output_filepath_stem)
+    cmd = generate_view_cmd(is_thickness, input_filename, output_filepath_stem, info)
 
     p = subprocess.Popen(cmd, cwd=working_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, error = p.communicate()
@@ -76,7 +85,7 @@ def generate_view_images(input_filename, is_thickness=True, working_dir=None, in
 
 def generate_output_file_path(file_path):
     # get relative path, then append with 
-    rel = os.path.relpath(os.path.abspath(file_path), root_path)
+    rel = os.path.relpath(os.path.abspath(file_path), input_root_path)
     out = output_root_path + os.path.sep + rel
     if not os.path.exists(os.path.dirname(out)):
         os.makedirs(os.path.dirname(out))
@@ -107,7 +116,7 @@ def get_category_names(category_relative_path):
 def generate_file_registry(file_path):
     #
     head, tail = os.path.split(file_path)
-    category_relative_path = os.path.relpath(head, root_path)
+    category_relative_path = os.path.relpath(head, input_root_path)
     categories = get_category_names(category_relative_path)
     info={"filename":  tail,   # todo, filename without path may be not unique
               "category": categories[0], 
@@ -135,34 +144,49 @@ def process_error(filename):
     # can only be run in serial mode
     ERROR_REGISTRY[filename] = check_error(filename)
     print("Delete file `{}` from registry for error".format(filename))
-    if not hasPerfileMetadata:
+    if filename in PART_REGISTRY:
         del PART_REGISTRY[filename]
 
+def is_conversion_required(input_file_path):
+    _input_suffix = input_file_path.split()[-1]
+    convertingGeometry = not input_file_path.endswith(input_file_suffix) 
+    return convertingGeometry
 
 def _process_input_file(input_file_path, output_file_path):
+    # if json metadata has been found, skip it
     output_stem = output_file_path[:output_file_path.rfind(".")]
     json_file_path = output_stem  + "_metadata.json"
+
     if resumable and os.path.exists(json_file_path):
+        print("skip existing file: ", input_file_path)
+        return True
+    if len(glob.glob(output_stem + "*" + image_suffix )) == view_count and not regenerating_images:
+        print("Generated image found, skip this input file: ", input_file)
         return True
 
+    if is_conversion_required(input_file_path):
+        if not os.path.exists(output_file_path):
+            done = convert(input_file_path, output_file_path)  # if conversion failed, do not register file
+            if done and _debug:
+                print("converted part:", output_file_path)
+        else:
+            if _debug:
+                print("converted mesh file has been found: ", output_file_path)
+        input_file = output_file_path
+    else:
+        input_file = input_file_path
+    
+    if not os.path.exists(input_file):
+        if _debug:
+            print("input file is not found (conversion failed): ", input_file)
+        return False
+
     if isMeshFile:
-        info = generate_metadata(input_file_path, json_file_path)
+        info = generate_metadata(input_file, json_file_path)
     else:
         info = None
     input_metadata_file_path = input_file_path.replace(input_file_suffix, metadata_suffix)
     #hasPerfileMetadata = os.path.exists(input_metadata_file_path)
-
-    convertingInput = not input_file_path.endswith(input_file_suffix) 
-    if convertingInput:
-        convert(input_file_path, output_file_path)  # if conversion failed, do not register file
-        print("converted part:", output_file_path)
-        input_file = output_file_path
-    else:
-        input_file = input_file_path
-
-    if len(glob.glob(output_stem + "*" + image_suffix )) == view_count:
-        print("Generated image found, skip this input file: ", input_file)
-        return True
 
     cwd = os.path.abspath(os.path.dirname(output_file_path))
     if generatingMultiViewImage:
@@ -269,8 +293,8 @@ if __name__ == "__main__":
     if os.path.exists(dataset_metadata_filepath) and resumable:
         with open(dataset_metadata_filepath, 'r') as f:
             existing_dataset = json.load(f)
-    process_folder(root_path, output_root_path)
-    #process_folder1(root_path)
+    process_folder(input_root_path, output_root_path)
+
     if using_threading:
         #wait all, another way is executor.shutdown()
         for file, fu in all_futures.items():

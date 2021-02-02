@@ -15,7 +15,8 @@ import pandas as pd
 pd.options.display.float_format = '{:,.2g}'.format
 from tqdm import tqdm
 
-from input_parameters import *
+from input_parameters import dataset_name, output_root_path, dataset_metadata_filepath, metadata_suffix, \
+      generatingThicknessViewImage, processed_imagedata_filepath, processed_metadata_filepath
 from imagePreprocess import collectImages
 
 dataset = []
@@ -29,6 +30,13 @@ else:
 
 
 def process_image(image_stem, image_suffices, metadata):
+    bbox = metadata["bbox"]
+    if any([ bbox[i+3] - bbox[i] <= 0 for i in range(3)]):
+        print("WARNING: Boundbox zero for ", image_stem)
+        return  # skip for this kind of error
+    if (metadata["area"] <= 0 or metadata["volume"] <= 0):
+        print("WARNING: zero area or volume for ", image_stem)
+        return
 
     ims = collectImages(image_stem, image_suffices)  # it is quick enough
 
@@ -152,8 +160,8 @@ if __name__ == "__main__":
         print(dataframe[:5])  # debug print
         dataframe.to_json(processed_metadata_filepath)
     #save images to binary format, for quicker loading
-    np.save(processed_imagedata_filename, np.stack(imagelist))
+    np.save(processed_imagedata_filepath, np.stack(imagelist))
     print("processed_metadata_filepath = ", processed_metadata_filepath)
-    print("save processed image file as ", processed_imagedata_filename)
+    print("save processed image file as ", processed_imagedata_filepath)
     print("single processed image shape ", imagelist[0].shape)
 
