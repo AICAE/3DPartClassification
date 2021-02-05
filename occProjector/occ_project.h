@@ -165,13 +165,18 @@ GridInfo generate_grid(const BoundBoxType bbox)
     return gInfo;
 }
 
+BoundBoxType toBoundBox(const Bnd_Box& bbox)
+{
+    double xmin, xmax, ymin, ymax, zmin, zmax;
+    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+    return {xmin, ymin, zmin, xmax, ymax, zmax};
+}
+
 BoundBoxType calcBoundBox(const TopoDS_Shape& shape)
 {
     Bnd_Box bbox;
     BRepBndLib::Add(shape, bbox);
-    double xmin, xmax, ymin, ymax, zmin, zmax;
-    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
-    return {xmin, ymin, zmin, xmax, ymax, zmax};
+    return toBoundBox(bbox);
 }
 
 GridInfo generate_grid(const TopoDS_Shape& shape)
@@ -254,35 +259,6 @@ TopoDS_Shape read_geometry(std::string filename)
 
 }
 
-/// axis_id == 2 for rotating around Z-axis, axis_id = 0 for x-axis
-TopoDS_Shape  rotate_shape(const TopoDS_Shape& shape)
-{
-    // boundbox is only needed if USE_CUBE_BOX
-    Bnd_Box bbox;
-    BRepBndLib::Add(shape, bbox);
-    double xmin, xmax, ymin, ymax, zmin, zmax;
-    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
-    double xL=xmax-xmin;
-    double yL=ymax-ymin;
-    double zL=zmax-zmin;
-
-    int axis_id = 2;
-    const gp_Ax1 axes[] = {gp::OX(), gp::OY(), gp::OZ()};
-
-    gp_Trsf trsf;
-    if( USE_CUBE_BOX ) 
-    {
-        trsf.SetRotation(axes[axis_id], std::atan(zL/yL));
-        throw std::runtime_error("not impl");
-    }
-    else
-    {
-        trsf.SetRotation(axes[axis_id], M_PI/4.0);    // will rotation add up? NO
-    } 
-    auto t = BRepBuilderAPI_Transform(shape, trsf, true);
-
-    return t.Shape();
-}
 
 /// for STEP, BREP shape input files, first of all, imprint and merge
 /// rotate shape with OBB to AABB, can also translate
@@ -347,7 +323,7 @@ const Handle(Poly_Triangulation)  generate_mesh(TopoDS_Face f, gp_Trsf& local_tr
 }
 
 /// OFF STL surface mesh, OCCT 7.4
-Handle(Poly_Triangulation)  read_mesh(std::string filename)
+Handle(Poly_Triangulation) read_mesh(std::string filename)
 {
     #if OCC_VERSION_HEX >= 0x070300
     auto t = RWStl::ReadFile(filename.c_str());
@@ -360,6 +336,32 @@ Handle(Poly_Triangulation)  read_mesh(std::string filename)
     #endif
 }
 
+
+BoundBoxType calc_mesh_boundbox(const Handle(Poly_Triangulation)& mesh)
+{
+    const TColgp_Array1OfPnt& nodes = mesh->Nodes();
+
+    double xmin, xmax, ymin, ymax, zmin, zmax;
+
+    // or using the first node coord to init bbox
+    nodes(1).Coord(xmin, ymin, zmin);
+    nodes(1).Coord(xmax, ymax, zmax);
+    BoundBoxType bbox = {xmin, ymin, zmin, xmax, ymax, zmax};
+
+    for (int i = nodes.Lower(); i <= nodes.Upper(); i++) {
+        Standard_Real co[DIM];
+        nodes(i).Coord(co[0], co[1], co[2]);
+        for (int d = 0; d < DIM; d++)
+        {
+            if (bbox[d] > co[d])
+                bbox[d] = co[d];
+            if (bbox[d+DIM] < co[d])
+                bbox[d+DIM] = co[d];          
+        }
+    }
+
+   return bbox; 
+}
 
 
 /// http://totologic.blogspot.com/2014/01/accurate-point-in-triangle-test.html
@@ -529,7 +531,7 @@ std::vector<std::array<size_t,2>> get_index_ranges(const std::vector<const Coord
             std::cout << "Error:  i_upper " << imax << " >= grid number " << gInfo.nsteps[iaxis] << std::endl;
             imax = gInfo.nsteps[iaxis];
         }
-        ranges.push_back({imin, imax});
+        ranges.push_back({static_cast<size_t>(imin), imax});
     }
     return ranges;
 }
@@ -614,19 +616,33 @@ void insert_intersections(const std::vector<const Coordinate*>& triangle, const 
     }
 }
 
+Handle(Poly_Triangulation) transform_triangulation(const Handle(Poly_Triangulation) mesh, const gp_Trsf local_transform)
+{
+    const TColgp_Array1OfPnt& nodes = mesh->Nodes();
 
+    TColgp_Array1OfPnt newPoints;
+    newPoints.Resize(nodes.Lower(), nodes.Upper(), false);
+
+    for (int i = nodes.Lower(); i <= nodes.Upper(); i++) {
+        Standard_Real x, y, z;
+        nodes(i).Coord(x, y, z);
+        local_transform.Transforms(x, y, z);  // inplace modify
+        newPoints(i) = gp_Pnt(x, y, z);
+    }
+   return new Poly_Triangulation(newPoints, mesh->Triangles());
+}
 
 void calc_intersections(const Handle(Poly_Triangulation) triangles, const GridInfo& ginfo, const gp_Trsf local_transform, IntersectionData& data) 
 {
     // mixing of array index starts at 1 and index starts 0 is buggy
     const TColgp_Array1OfPnt &nodes = triangles->Nodes();
-    // retrieve triangle coordinates
     std::vector<Coordinate> points;   // NCollection_Array1<>
     points.reserve(nodes.Upper());
     if (nodes.Lower() == 1 )  // index starts at 1
     {
         //points.push_back({INFINITY, INFINITY, INFINITY});  // if we use index 0, then all inf
     }
+    // retrieve triangle coordinates
     for (int i = nodes.Lower(); i <= nodes.Upper(); i++) {
         Standard_Real x, y, z;
         nodes(i).Coord(x, y, z);

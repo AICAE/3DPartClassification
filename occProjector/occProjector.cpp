@@ -5,15 +5,30 @@
 #include "geometryProperty.cpp"
 
 typedef Eigen::MatrixXf Image;
-const std::vector<std::string> PNAMES = {"_XY", "_YZ", "_ZX"};  // rolling
-const std::vector<std::string> TRINAMES = {"_TRI_XY", "_TRI_YZ", "_TRI_ZX"}; 
+const std::vector<std::string> ORTH_NAMES = {"_XY", "_YZ", "_ZX"};  // _XY is project from Z-axis, orth
+const std::vector<std::string> TRI_NAMES = {"_TRI_XY", "_TRI_YZ", "_TRI_ZX"}; 
+const std::vector<std::string> RZ_NAMES = {"_RZ_XY", "_RZ_YZ", "_RZ_ZX"}; 
+const std::vector<std::string> RY_NAMES = {"_RY_XY", "_RY_YZ", "_RY_ZX"}; 
+const std::vector<std::string> RX_NAMES = {"_RX_XY", "_RX_YZ", "_RX_ZX"};
+/// corresponding to projection_id
+const std::vector<const std::vector<std::string>*> PROJ_NAMES = {
+    &RX_NAMES, &RY_NAMES, &RZ_NAMES, &TRI_NAMES, &ORTH_NAMES
+};
+const int TRI_PROJECTION = 3;
+const int NO_ROTATION = 4;
+const bool MERGE_3_INTERSECTION = true;  // ModeNet stl mesh has self-intersection faces
+
+//bool USE_ISOMETRIC = false;   // currently
+// bool ROTATE_ZAXIS = false;
+// bool ROTATE_YAXIS = false;
+// bool ROTATE_XAXIS = false;
 
 #define DUMP_BOP_INTERSECTED_EDGES 0
 #define DUMP_BOP_GRID 1
 #define DUMP_PART_MESH 0
 #define USE_OPENCV 1
 
-const double error_threshold = 0.05;  // less than this ratio will be interpolated
+const double error_threshold = 0.03;  // less than this ratio will be interpolated
 
 #if USE_OPENCV
 // OpenImageIO can be another choice
@@ -24,10 +39,52 @@ const std::string IM_SUFFIX = ".png";
 const std::string IM_SUFFIX = ".csv";
 #endif
 
-const bool MERGE_3_INTERSECTION = true;  // ModeNet stl mesh has self-intersection faces
-bool USE_ISOMETRIC = false;               // currently
+
+
 // PCL has a tool `mesh2pcd`: convert a CAD model to a PCD (Point Cloud Data) file, using ray tracing operations.
 
+gp_Trsf generate_transformation(BoundBoxType bbox,  int projection_id = 5)
+{
+    double xL = bbox[3]-bbox[0];
+    double yL = bbox[4]-bbox[1];
+    double zL = bbox[5]-bbox[2];
+
+    const gp_Ax1 axes[] = {gp::OX(), gp::OY(), gp::OZ()};
+    gp_Trsf trsf;
+
+    if (projection_id == NO_ROTATION)
+        return trsf;
+
+    if (projection_id == TRI_PROJECTION)
+    {
+       throw std::runtime_error("not impl"); 
+    }
+    int axis_id = projection_id;
+    if( USE_CUBE_BOX ) 
+    {
+        trsf.SetRotation(axes[axis_id], M_PI/4.0);    // will rotation add up? NO
+    }
+    else
+    {
+        trsf.SetRotation(axes[axis_id], M_PI/4.0);    // will rotation add up? NO
+        //trsf.SetRotation(axes[axis_id], std::atan(zL/yL));
+        // throw std::runtime_error("not impl");
+    }
+    return trsf;
+}
+
+/// axis_id == 2 for rotating around Z-axis, axis_id = 0 for x-axis
+TopoDS_Shape  transform_shape(const TopoDS_Shape& shape, int projection_id)
+{
+    // boundbox is only needed if USE_CUBE_BOX
+    Bnd_Box bbox;
+    BRepBndLib::Add(shape, bbox);
+
+    gp_Trsf trsf = generate_transformation(toBoundBox(bbox), projection_id);
+    auto t = BRepBuilderAPI_Transform(shape, trsf, true);
+
+    return t.Shape();
+}
 
 //typedef std::array<double, 3> Coordinate;   gp_Pnt,  gp_XYZ instead
 void save_image(const Image& im, const std::string& filename)
@@ -455,23 +512,23 @@ void calc_thickness_bop(const TopoDS_Shape& shape, const GridInfo& gInfo, Inters
         }
 
         #if DUMP_BOP_INTERSECTED_EDGES
-        BRepTools::Write(merged1, ("debug_bop_intersected_" + PNAMES[iaxis] + "_edges.brep").c_str());
+        BRepTools::Write(merged1, ("debug_bop_intersected_" + ORTH_NAMES[iaxis] + "_edges.brep").c_str());
         #endif
 #if DUMP_BOP_GRID
         cBuilder.Add(merged, shape);
-        BRepTools::Write(merged, ("debug_bop" + PNAMES[iaxis] + "_grid.brep").c_str());
+        BRepTools::Write(merged, ("debug_bop" + ORTH_NAMES[iaxis] + "_grid.brep").c_str());
 #endif
     }
 }
 
 /// triangulation, fast less precise than BOP
-int project(std::string input, const std::string& output_file_stem, bool triview=false, bool bop = false)
+int project_geom(std::string input, const std::string& output_file_stem, int projection_id, bool bop = false)
 {
     Bnd_OBB obb;
     auto shape = prepare_shape(input, obb);
-    if (triview)
+    if (projection_id != NO_ROTATION)
     {
-        shape = rotate_shape(shape);
+        shape = transform_shape(shape, projection_id);
     }
     MeshData mesh;
     mesh.grid_info = generate_grid(shape);
@@ -494,14 +551,14 @@ int project(std::string input, const std::string& output_file_stem, bool triview
     }
 
     // save thickness matrix as numpy array,  scale it?  save as image?
-    if (triview)
+    if (projection_id == NO_ROTATION)
     {
-        save_data(data, output_file_stem, mesh.grid_info, TRINAMES);
+        save_data(data, output_file_stem, mesh.grid_info, ORTH_NAMES);
+        writeMetadataFile(shape, output_file_stem + "_metadata.json");
     }
     else
     {
-        save_data(data, output_file_stem, mesh.grid_info, PNAMES);
-        writeMetadataFile(shape, output_file_stem + "_metadata.json");
+        save_data(data, output_file_stem, mesh.grid_info, *PROJ_NAMES[projection_id]);
     }
 
 
@@ -514,27 +571,40 @@ int project(std::string input, const std::string& output_file_stem, bool triview
     return 0;
 }
 
-
-int project_mesh(std::string input, const std::string& output_file_stem, const BoundBoxType bbox)
+/// once bound box can be calc from mesh, then FreeCAD preprocessor is not needed
+int project_mesh(std::string input, const std::string& output_file_stem, int projection_id, const BoundBoxType& bbox)
 {
-
     IntersectionData data;
     init_intersection_data(data);
+    auto input_mesh = read_mesh(input);
+    // calc bound box from input mesh triangulation
+    auto rotated_mesh = transform_triangulation(input_mesh, generate_transformation(bbox, projection_id));
 
     MeshData mesh;
-    mesh.grid_info = generate_grid(bbox);
-    mesh.local_transform = gp_Trsf();  // not necessary ? 
-    mesh.triangles = read_mesh(input);
+    mesh.local_transform = gp_Trsf();  // dummy, do nothing
+    mesh.triangles = rotated_mesh;
+    mesh.grid_info = generate_grid(calc_mesh_boundbox(mesh.triangles));
+    // 
     calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
 
     // save thickness matrix as numpy array,  scale it?  save as image?
-    save_data(data, output_file_stem, mesh.grid_info, PNAMES);
+    save_data(data, output_file_stem, mesh.grid_info, *PROJ_NAMES[projection_id]);
 
     return 0;
 }
 
 
 #include <argparse.hpp>
+
+int get_projection_id(const argparse::ArgumentParser& program)
+{
+    if (program.get<bool>("--triview"))
+        return 3;
+    else if  (program.get<bool>("--rz"))
+        return 2;
+    else
+        return NO_ROTATION;
+}
 
 int main(int argc, char *argv[]) {
   argparse::ArgumentParser program("program name");
@@ -548,8 +618,8 @@ int main(int argc, char *argv[]) {
 
   program.add_argument("--grid").nargs(3)
     .help("image pixel for x, y, z as an integer array")
-    .default_value(std::vector<int>{64, 64, 64})
-    .action([](const std::string& value) { return std::stoi(value); });
+    .default_value(std::vector<size_t>{64, 64, 64})
+    .action([](const std::string& value) { return std::stoul(value); });
 
   program.add_argument("--bbox").nargs(6)
     .help("boundbox values for stl off input file: xmin, ymin, zmin, xmax, ymax, zmax")
@@ -560,13 +630,23 @@ int main(int argc, char *argv[]) {
     .default_value(false)
     .implicit_value(true);
 
-  program.add_argument("--xyz")
+  program.add_argument("--triview")
     .help("generate extra tri views")
+    .default_value(false)
+    .implicit_value(true);
+
+  program.add_argument("--rz")
+    .help("generate views after rotating Z by 45deg")
     .default_value(false)
     .implicit_value(true);
 
   program.add_argument("--obb")
     .help("use the OBB, instead of default axis-align bound box")
+    .default_value(false)
+    .implicit_value(true);
+
+  program.add_argument("--cube")
+    .help("use the cube bound box (equal max length for xyz), instead of obb or normal box bound box")
     .default_value(false)
     .implicit_value(true);
 
@@ -579,11 +659,13 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
 
-    USE_ISOMETRIC  = program.get<bool>("--xyz");
+
+
     USE_OBB = program.get<bool>("--obb");  // set global variable
+    USE_CUBE_BOX = program.get<bool>("--cube");
     //if(program.present("--grid"))  // present() must not have a default value
     {
-        std::vector<int> grid = program.get<std::vector<int>>("--grid");
+        std::vector<size_t> grid = program.get<std::vector<size_t>>("--grid");
         NGRIDS = {grid[0], grid[1], grid[2]};  // set global variable
     }
 
@@ -594,6 +676,8 @@ int main(int argc, char *argv[]) {
         output_stem = program.get<std::string>("-o");
     }
 
+    int projection_id = get_projection_id(program);
+
     // only if found ".stl", ".off"  must be converted to stl file
     if(input.find(".stl") !=std::string::npos)
     {
@@ -601,12 +685,13 @@ int main(int argc, char *argv[]) {
         if (true)  // program.present("--bbox")
         {
             bbox = program.get<BoundBoxType>("--bbox");
-            project_mesh(input, output_stem, bbox);
+            //auto trsf = generate_transformation();  translation will also change boundbox
+            project_mesh(input, output_stem, projection_id, bbox);
         }
     }
     else
     {
-        project(input, output_stem, program.get<bool>("--xyz"), program.get<bool>("--bop"));
+        project_geom(input, output_stem, projection_id, program.get<bool>("--bop"));
         // if(program.get<bool>("--bop"))
         // {
         //     //bop(input, output_stem);  // working but extremely slow, can be used to compare speed
