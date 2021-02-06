@@ -107,16 +107,16 @@ else:  # FreeCADLib,  or  ModelNet
                 entry["category"] = entry["subcategories"][0]
             if splittingProfileCategory and category == "Profiles EN":
                 entry["category"] = entry["subcategories"][0]
-            # tmp hack
-            #metafolder = "/mnt/windata/MyData/freecad_library_output" + os.path.sep + entry["path"]
 
             if category == "Profiles EN": # nasty patch, after reorganized processed image folder
                 for p in ['DIN1025-2 HE-B-Profiles',  'DIN1025-4 HE-M-Profiles', 'DIN1025-3 HE-A-Profiles', 'DIN1025-5 IPE-Profiles']:
                     if p in entry["path"]:
                         entry["path"] = entry["path"].replace(p, "DIN1025-Profiles" + os.path.sep + p)
+                        entry["category"] = "DIN1025-Profiles" 
                 for p in ['EN10056 Equal Angle Bars',  'EN10056 Unequal Angle Bars']:
                     if p in entry["path"]:
                         entry["path"] = entry["path"].replace(p, "EN10056 Angle Bars" + os.path.sep + p)
+                        entry["category"] = "EN10056 Angle Bars"
         filefolder = output_root_path + os.path.sep + entry["path"]
         metafolder = output_root_path + os.path.sep + entry["path"]
         assert os.path.exists(filefolder)
@@ -143,6 +143,43 @@ else:  # FreeCADLib,  or  ModelNet
             # about 10 can not find meta data files,  image dump may have error
             print("Can not find metadata or all view image files ", filefolder + os.path.sep + input_file_stem)
 
+def filter(dataframe, imagelist, class_col_name = "category", minimum_sample_count = minimum_sample_count):
+    # remove group/class whose sample count is less than a threshold
+    df = pd.DataFrame(dataset)  # natural index?
+    # add Index to dataframe, then group, get the unique classes
+    df = df.reset_index()
+    df['orig_index'] = df.index   # images has the same order as df
+    df.groupby([class_col_name])
+    #group_values = df[class_col_name].unique()  # return value list? 
+    table = df.groupby([class_col_name]).size().reset_index(name='counts')
+    table = table[table['counts'] >= minimum_sample_count]
+    classes = table[class_col_name]
+    df_filtered = df[df[class_col_name].isin(classes)]
+
+    imglist = []
+    for i in df_filtered['orig_index'].to_numpy():
+        imglist.append(imagelist[i])
+    return df_filtered, imglist
+
+def summary(df, class_col_name = "category"):
+    table = df.groupby([class_col_name]).size().reset_index(name='counts')
+    print(table)
+    print("dataset sample summary", dataset_name)
+    try:
+        print(table.to_markdown()) # new API since pandas 1.0
+    except:
+        pass
+
+def save(dataset, imagelist):
+    dataframe, imagelist = filter(pd.DataFrame(dataset), imagelist)
+    summary(dataframe)
+    print(dataframe[:5])  # debug print
+    dataframe.to_json(processed_metadata_filepath)
+    #save images to binary format, for quicker loading
+    np.save(processed_imagedata_filepath, np.stack(imagelist))
+    print("processed_metadata_filepath = ", processed_metadata_filepath)
+    print("save processed image file as ", processed_imagedata_filepath)
+    print("single processed image shape ", imagelist[0].shape)
 
 def process():
     f=open(dataset_metadata_filepath, "r")
@@ -166,19 +203,11 @@ def process():
             step_i=0
         count +=1
 
-        #if count > 10:        break
     print("registered {} items", len(imagelist))
 
 if __name__ == "__main__":
 
     process()
     if (dataset):
-        dataframe = pd.DataFrame(dataset)
-        print(dataframe[:5])  # debug print
-        dataframe.to_json(processed_metadata_filepath)
-    #save images to binary format, for quicker loading
-    np.save(processed_imagedata_filepath, np.stack(imagelist))
-    print("processed_metadata_filepath = ", processed_metadata_filepath)
-    print("save processed image file as ", processed_imagedata_filepath)
-    print("single processed image shape ", imagelist[0].shape)
+        save(dataset, imagelist)
 

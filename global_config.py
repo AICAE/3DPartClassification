@@ -7,6 +7,7 @@ isModelNet40 = False
 isModelNet40Aligned = False
 dataset_name = "FreeCAD_lib"   # Mechanical CAD part library
 #dataset_name = "KiCAD_lib"       # ECAD KiCAD library
+minimum_sample_count = 20
 
 testing = False   # for data preprocessing debugging purpose, using test data
 usingMixedInputModel = True # False: if use only image input

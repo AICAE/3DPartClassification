@@ -5,7 +5,8 @@ https://vict0rs.ch/2018/05/24/sample-multilabel-dataset/
 """
 
 def index_split(group_size, ratio):
-    # if ratio is 0.25, 0.2, then this works, 
+    # return index list in the group/class, test samples is selected with equal distance
+    # test if ratio is 0.25, 0.2, then this works, 
     train = []
     test = []
     gap = int(1.0 / (1-ratio))
@@ -39,13 +40,13 @@ def my_split(df, images, class_col_name, train_folder_name = None, ratio=0.8, sh
     df = df.reset_index()
     df['orig_index'] = df.index   # images has the same order as df
     df.groupby([class_col_name])
-    group_values = df[class_col_name].unique()  # return value list? 
-    group_count = len(group_values)
+    group_names = df[class_col_name].unique()  # return value list? 
+    group_count = len(group_names)
 
     train = pd.DataFrame()
     test = pd.DataFrame()
     gi = 0
-    for val in group_values:
+    for val in group_names:
         group_data = df[df[class_col_name] == val]
         # shuffling?
         group_size = group_data.shape[0]
