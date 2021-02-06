@@ -2,6 +2,8 @@ from __future__ import print_function, division
 import os
 import os.path
 
+
+from global_config import *
 ##########################
 # FreeCAD standard part library
 #########################
@@ -10,6 +12,8 @@ import os.path
 testing = False
 MechanicalOnly = True  # no electronics parts
 splittingFastenerCategory = True
+splittingProfileCategory = True
+# profile should also be split, but manually
 # can be further limited to fasteners of Mechanical parts
 
 # lower(), some fcstd may does not have step corresponding, some may have only step
@@ -33,15 +37,14 @@ if testing:
     output_root_path = input_root_path + "_output"
     dataset_metadata_filename =  output_root_path + "/test_data.json"
 else:
-    output_root_path = "/mnt/windata/MyData/freecad_library_output"
-    if not os.path.exists(output_root_path):
-        os.makedirs(output_root_path)
+    output_root_path = DATA_DIR + "freecad_library_output"
+    dataset_dir_path = DATA_DIR + "freecad_library_output"
 
     if MechanicalOnly:
-        input_root_path = "/mnt/windata/MyData/FreeCAD-library/Mechanical Parts"
+        input_root_path = DATA_DIR + "FreeCAD-library/Mechanical Parts"
         dataset_metadata_filename = "mechdata.json"
     else:
-        input_root_path = "/mnt/windata/MyData/FreeCAD-library"
+        input_root_path = DATA_DIR + "/FreeCAD-library"
         dataset_metadata_filename = "alldata.json"
 
 

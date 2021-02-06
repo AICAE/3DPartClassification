@@ -72,10 +72,14 @@ elif dataset_name == "ModelNet":
         dataset_metadata_filename = "testModelNet_dataset.json"
     else:
         if isModelNet40:
-            input_root_path = INPUT_DATA_DIR + "ModelNet40"
-            output_root_path = INPUT_DATA_DIR + "ModelNet40_output"
-            dataset_dir_path = DATA_DIR + "ModelNet40_output"
-            dataset_metadata_filename = "ModelNet40_dataset.json"
+            if isModelNet40Aligned:
+                dataset_full_name = "ModelNet40Aligned"
+            else:
+                dataset_full_name = "ModelNet40"
+            input_root_path = INPUT_DATA_DIR + dataset_full_name
+            output_root_path = input_root_path + "_output"
+            dataset_dir_path = DATA_DIR + dataset_full_name + "_output"
+            dataset_metadata_filename = dataset_full_name + "_dataset.json"
         else:
             input_root_path = DATA_DIR + "ModelNet10"
             output_root_path = DATA_DIR + "ModelNet10_output"
@@ -168,21 +172,19 @@ paddingImage = False  # let tensorflow do random padding for data augmentation
 ## image pixel size has been hardcoded into view image generator apps
 if generatingThicknessViewImage:
     normalizingImage = True
-    im_width, im_height = 60, 60   # generated
-    model_input_width, model_input_height = 60, 60   # after padding, for input into tensorflow
-else:
-    if dataset_name == "Thingi10K":
-        im_width, im_height = 60, 60   # generated, before padding
-        #final image size to be learned by AI
-        model_input_width, model_input_height = 64, 64
+    if usingCubeBoundBox:
+        im_width, im_height = 60, 60   # generated
     else:
-        im_width, im_height = 120, 120   # before padding
-        # final image size to be learned by AI
-        model_input_width, model_input_height = 128, 128
+        im_width, im_height = 60, 60   # generated
+    model_input_width, model_input_height = im_width, im_height   # after padding, for input into tensorflow
+else:
+    im_width, im_height = 120, 120   # before padding
+    # final image size to be learned by AI
+    model_input_width, model_input_height = 128, 128
 
-        ## compression  only for some CAD part
-        compressingImage = False #  compressed or not compressed, both working
-        block_size = 8  # can be 4,  4X4 binary pixels compressed into uint16
+    ## compression  only for some CAD part
+    compressingImage = False #  compressed or not compressed, both working
+    block_size = 8  # can be 4,  4X4 binary pixels compressed into uint16
 
 if compressingImage:
     result_shape = (view_count, model_input_height//block_size, model_input_width//block_size)
@@ -209,7 +211,7 @@ if not os.path.exists(dataset_dir_path):
 dataset_metadata_filepath = output_root_path + os.path.sep + dataset_metadata_filename
 
 
-processed_metadata_filepath = dataset_dir_path + os.path.sep + "processed_" + dataset_metadata_filename
+_processed_metadata_filename = "processed_" + dataset_metadata_filename
 if compressingImage:
     _processed_imagedata_filename = "compressed_imagedata.npy"
 else:
@@ -219,10 +221,11 @@ if not concatingImage:
     _processed_imagedata_filename = "nview_" + _processed_imagedata_filename
 
 if usingCubeBoundBox:
-    _processed_imagedata_filename = "cubebox_" + _processed_imagedata_filename    
+    _processed_imagedata_filename = "cubebox_" + _processed_imagedata_filename
+    _processed_metadata_filename = "cubebox_" + _processed_metadata_filename
 
 processed_imagedata_filepath = dataset_dir_path + os.path.sep + _processed_imagedata_filename
-
+processed_metadata_filepath = dataset_dir_path + os.path.sep + _processed_metadata_filename
 ######################################################################################
 ## saved model file to continue model fit
 _saved_model_name = dataset_name
@@ -233,9 +236,13 @@ if dataset_name == "ModelNet":
         _saved_model_name = "ModelNet10"
 
 if usingMixedInputModel:
-    _saved_model_name = "mixed_input_" +  _saved_model_name
+    _saved_model_name = "mixedinput_" +  _saved_model_name
 else:
-    _saved_model_name = "image_only_" +  _saved_model_name    
+    _saved_model_name = "imageonly_" +  _saved_model_name    
+if usingCubeBoundBox:
+    _saved_model_name = "cubebox_" +  _saved_model_name
+if usingMaxViewPooling:
+    _saved_model_name = "maxviewpooling_" +  _saved_model_name
 
 if generatingMultiViewImage:
     _saved_model_name = "multiview_" +  _saved_model_name
@@ -245,7 +252,7 @@ else:
     else:
         _saved_model_name = "DT_" +  _saved_model_name
 
-saved_model_file = dataset_dir_path + os.path.sep + _saved_model_name
+saved_model_filepath = dataset_dir_path + os.path.sep + _saved_model_name
 
 
 modelnet40_classes = ['airplane','bathtub','bed','bench','bookshelf','bottle','bowl','car','chair',

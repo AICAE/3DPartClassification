@@ -1,19 +1,25 @@
 INPUT_DATA_DIR = "/media/qxia/QingfengXia/AICAE_DataDir/"
 DATA_DIR="/mnt/windata/DataDir/"
 
-testing = False   # for debugging purpose
+#dataset_name = "Thingi10K"      # all data in one folder, do not use, categorization not ideal
+#dataset_name =  "ModelNet"       #  has two variants, modelnet10 and modelnet40
+isModelNet40 = False
+isModelNet40Aligned = False
+dataset_name = "FreeCAD_lib"   # Mechanical CAD part library
+#dataset_name = "KiCAD_lib"       # ECAD KiCAD library
+
+testing = False   # for data preprocessing debugging purpose, using test data
 usingMixedInputModel = True # False: if use only image input
 usingMaxViewPooling = False # False: use concat
 
-#dataset_name = "Thingi10K"       # all data in one folder, do not use, categorization not ideal
-dataset_name =  "ModelNet"       #  has two variants, modelnet10 and modelnet40
-isModelNet40 = False
-#dataset_name = "FreeCAD_lib"   # Mechanical CAD part library
-#dataset_name = "KiCAD_lib"       # ECAD KiCAD library
+# control view generator
+usingCubeBoundBox = True   #  length, height, width for the boundbox is same length, i.e. shape is not scaled
+usingOBB = False  # use orientation bound box
+usingBOP = True  # very slow but more robust, for geometry input only
 
-usingCubeBoundBox = False
-usingOBB = False
-usingXYZview = False
+# 0 or 1 can be enabled
+usingRotatingZAxisView = False # rotate currently rotate Z axis by 45degree
+usingTriView = False  # not impl yet
 
 usingKerasTuner = False
 

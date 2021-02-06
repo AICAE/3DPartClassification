@@ -7,9 +7,9 @@ import subprocess
 from collections import OrderedDict
 
 _debug = True
-using_threading = True  # false, can help debugging
-regenerating_images = True
-resumable = True  # carry on work left, Registry can not resume for the time being
+using_threading = True  # False, can help in debugging
+regenerating_images = False
+resumable = False  # carry on work left, Registry can not resume for the time being
 existing_dataset = {}
 
 from input_parameters import *
@@ -34,13 +34,21 @@ def get_filename_stem(input_filename):
 def generate_view_cmd(is_thickness, input_filename, output_filepath_stem, info):
     # depends on input_parameter.py
     if is_thickness==True:
-        args = ["--grid", str(im_width), str(im_width), str(im_width)]   #  + ["--bop"]
+        args = ["--grid", str(im_width), str(im_width), str(im_width)]   
+        if usingBOP:
+            args.append("--bop")
         if usingCubeBoundBox:
             args.append("--cube")
         if usingOBB:
             args.append("--obb")
-        if usingXYZview:
-            args.append("--xyz")
+
+        if usingTriView:
+            args.append("--triview")
+        elif usingRotatingZAxisView:
+            args.append("--rz")
+        else:
+            pass  # no transformation
+
         if isMeshFile:
             assert info
             args += ["--bbox"] + [ str(v) for v in info["bbox"]] 
@@ -67,6 +75,8 @@ def generate_view_images(input_filename, is_thickness=True, working_dir=None, in
     #print(input_filename, working_dir)
 
     cmd = generate_view_cmd(is_thickness, input_filename, output_filepath_stem, info)
+    if _debug:
+        print(" ".join(cmd))
 
     p = subprocess.Popen(cmd, cwd=working_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, error = p.communicate()
@@ -182,10 +192,13 @@ def _process_input_file(input_file_path, output_file_path):
         return False
 
     if isMeshFile:
-        info = generate_metadata(input_file, json_file_path)
+        if not os.path.exists(json_file_path):
+            info = generate_metadata(input_file, json_file_path)
+        else:
+            info = json.load(open(json_file_path, "r"))
     else:
         info = None
-    input_metadata_file_path = input_file_path.replace(input_file_suffix, metadata_suffix)
+    #input_metadata_file_path = input_file_path.replace(input_file_suffix, metadata_suffix)
     #hasPerfileMetadata = os.path.exists(input_metadata_file_path)
 
     cwd = os.path.abspath(os.path.dirname(output_file_path))
@@ -230,7 +243,7 @@ def process_folder(input_folder, output_folder, level=0):
         suffix = (f.split('.')[-1]).lower()
         processed_file_path = output_folder + os.path.sep + f[:f.rfind(".")] + "." + input_file_suffix
         if (suffix in supported_input_file_suffices):
-            if not os.path.exists(processed_file_path):
+            if not os.path.exists(processed_file_path) or regenerating_images:
                 nb_processed +=1
                 if using_threading:
                     future = executor.submit(process_input_file, input_file, processed_file_path)
