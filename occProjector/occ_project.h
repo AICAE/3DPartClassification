@@ -337,6 +337,17 @@ Handle(Poly_Triangulation) read_mesh(std::string filename)
 }
 
 
+bool write_mesh(const Handle(Poly_Triangulation)& t, std::string filename)
+{
+    if(t.IsNull())
+        throw std::runtime_error(std::string("Mesh triangulation is empty, triangles")); 
+    #if OCC_VERSION_HEX >= 0x070300
+    return RWStl::WriteAscii(t, OSD_Path(filename.c_str()));   
+    #else
+    throw std::runtime_error(std::string("occ 7.4 is needed to read stl mesh as Poly_Triangulation"));
+    #endif
+}
+
 BoundBoxType calc_mesh_boundbox(const Handle(Poly_Triangulation)& mesh)
 {
     const TColgp_Array1OfPnt& nodes = mesh->Nodes();
@@ -433,18 +444,72 @@ int calc_intersection(const std::vector<const Coordinate*> tri, const std::vecto
     w = I - (*tri[0]);
     wu = w.Dot(u);
     wv = w.Dot(v);
-    D = uv * uv - uu * vv;
+    D = uv * uv - uu * vv;   // D is a big negative number, if ray and triangle are almost parallel
 
-    // get and test parametric coords
+    scalar precision = 1e-9;  // slightly outside the triangle may also counted as inside/on the edge of the triangle
+
     scalar s, t;
-    s = (uv * wv - vv * wu) / D;
-    if (s < 0.0 || s > 1.0)         // I is outside T
+    s = (uv * wv - vv * wu) / D;   // s is very small/zero, if the ray is near a triangle vertex
+    if (s < 0.0-precision || s > 1.0+precision)         // I is outside T
         return 0;
-    t = (uv * wu - uu * wv) / D;
-    if (t < 0.0 || (s + t) > 1.0)  // I is outside T
+    t = (uv * wu - uu * wv) / D;   // if on edge/vertex, this t value is very small, zero
+    if (t < 0.0-precision || (s + t) > 1.0+precision)  // I is outside T
         return 0;
 
     return 1;
+}
+
+// test if intersection in triangle edge situation, test precision sensitivity
+void test_calc_intersection(bool near_vertex = false)
+{
+    //    Return: -1 = triangle is degenerate (a segment or point)
+    //             0 =  disjoint (no intersect)
+    //             1 =  intersect in unique point I1
+    //             2 =  are in the same plane
+    gp_Vec intersection_point;
+    double tol = 1e-7;
+    double BIG_NUM = 1e5;
+    double heights[] = {BIG_NUM, 1, 1.0/BIG_NUM, -1.0/BIG_NUM -BIG_NUM};  
+    // if height is a big number, the ray is almost parallel to the ray, if small then ray is normal to the triangle
+    for(auto h: heights)
+    {
+        Coordinate p1(1, 0, 0);
+        Coordinate p2(0, 1, 0);
+        Coordinate p3(0, 0, h);
+        Coordinate p12 = (p1 + p2) / 2.0;
+        if(near_vertex)
+        {
+            p12 = p1;
+        }
+
+        Coordinate ray_start = p12;
+        ray_start.SetZ(p12.Z() - 1);
+        Coordinate ray_end = p12;
+        ray_end.SetZ(p12.Z() + 1);
+        const std::vector<const Coordinate*> tri = {&p1, &p2, &p3};
+        const std::vector<const Coordinate*> ray = {&ray_start, &ray_end};
+
+
+        double offsets[] = {-tol, 0, tol, tol*100};
+        int results[] = {1, 1, 0, 0};
+        double x_edge = p12.X();
+        
+        for(int i = 0; i<std::size(offsets); i++)
+        {
+            ray_start.SetX(x_edge + offsets[i]);
+            ray_end.SetX(x_edge + offsets[i]);
+            int ret = calc_intersection(tri, ray, intersection_point);
+            if (ret != results[i])
+            {
+                std::cout << "Error: intersection type" << ret << " is not correct, should be " << results[i]
+                    << ", height = " << h  << ", offset = " << offsets[i] << std::endl;
+                std::cout << "intersection point coordinate: " << intersection_point.X() << ", "
+                    << intersection_point.Y() << ", " << intersection_point.Z() << std::endl;
+                calc_intersection(tri, ray, intersection_point);  // redo it, to debug
+            }
+        }
+    }
+
 }
 
 bool has_intersection(const std::vector<const Coordinate*> poly, double vi, double vj, int iaxis)
@@ -565,9 +630,12 @@ void insert_intersections(const std::vector<const Coordinate*>& triangle, const 
         double h_max = gInfo.starts[third_index] + gInfo.spaces[third_index] * t_end;
 
         IntersectionMat& mat = *data[iaxis];
-        for(size_t r =  r_start; r <= r_end; r++)  // r_end must also been used, closed range
+        for(size_t r = r_start; r <= r_end; r++)  // r_end must also been used, closed range
         {
             for(size_t c = c_start; c <= c_end; c++)
+        // for(size_t r = 0; r <= NGRIDS[r_index]; r++)  // r_end must also been used, closed range
+        // {
+        //     for(size_t c = 0; c <= NGRIDS[c_index]; c++)
             {
                 double r_value = gInfo.starts[r_index] + gInfo.spaces[r_index] * r;
                 double c_value = gInfo.starts[c_index] + gInfo.spaces[c_index] * c;
@@ -616,6 +684,7 @@ void insert_intersections(const std::vector<const Coordinate*>& triangle, const 
     }
 }
 
+// tested by write the transformed trianglulation to stl file
 Handle(Poly_Triangulation) transform_triangulation(const Handle(Poly_Triangulation) mesh, const gp_Trsf local_transform)
 {
     const TColgp_Array1OfPnt& nodes = mesh->Nodes();
@@ -632,7 +701,7 @@ Handle(Poly_Triangulation) transform_triangulation(const Handle(Poly_Triangulati
    return new Poly_Triangulation(newPoints, mesh->Triangles());
 }
 
-void calc_intersections(const Handle(Poly_Triangulation) triangles, const GridInfo& ginfo, const gp_Trsf local_transform, IntersectionData& data) 
+void calc_intersections(const Handle(Poly_Triangulation) triangles, const GridInfo& ginfo, const gp_Trsf* local_transform, IntersectionData& data) 
 {
     // mixing of array index starts at 1 and index starts 0 is buggy
     const TColgp_Array1OfPnt &nodes = triangles->Nodes();
@@ -646,7 +715,8 @@ void calc_intersections(const Handle(Poly_Triangulation) triangles, const GridIn
     for (int i = nodes.Lower(); i <= nodes.Upper(); i++) {
         Standard_Real x, y, z;
         nodes(i).Coord(x, y, z);
-        local_transform.Transforms(x, y, z);  // inplace modify
+        if(local_transform)   // this change coord, even suppose not to change
+            local_transform->Transforms(x, y, z);  // inplace modify, 
         points.push_back({x,y,z});
     }
 

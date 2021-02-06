@@ -10,7 +10,7 @@ const std::vector<std::string> TRI_NAMES = {"_TRI_XY", "_TRI_YZ", "_TRI_ZX"};
 const std::vector<std::string> RZ_NAMES = {"_RZ_XY", "_RZ_YZ", "_RZ_ZX"}; 
 const std::vector<std::string> RY_NAMES = {"_RY_XY", "_RY_YZ", "_RY_ZX"}; 
 const std::vector<std::string> RX_NAMES = {"_RX_XY", "_RX_YZ", "_RX_ZX"};
-/// corresponding to projection_id
+/// corresponding to projection_id, X-axis = 0, 
 const std::vector<const std::vector<std::string>*> PROJ_NAMES = {
     &RX_NAMES, &RY_NAMES, &RZ_NAMES, &TRI_NAMES, &ORTH_NAMES
 };
@@ -24,7 +24,7 @@ const bool MERGE_3_INTERSECTION = true;  // ModeNet stl mesh has self-intersecti
 // bool ROTATE_XAXIS = false;
 
 #define DUMP_BOP_INTERSECTED_EDGES 0
-#define DUMP_BOP_GRID 1
+#define DUMP_GRID 0
 #define DUMP_PART_MESH 0
 #define USE_OPENCV 1
 
@@ -260,6 +260,47 @@ void test_IndexedMap()
     std::cout << "NCollection_IndexedDataMap index: " << i1 << i2 << std::endl;
 }
 
+/// code extracted from `calc_thickness_bop`
+void dump_grid(const GridInfo& gInfo, std::string input)
+{
+    for(int iaxis = 0; iaxis < 3; iaxis++)
+    {
+        size_t r_index = iaxis;
+        size_t c_index = (1 + iaxis)%3;
+        size_t z_index = (iaxis + 2)%3;
+        //gp_Vec dir(0, 0, 0);
+        //dir.SetCoord(z_index + 1, 1.0);
+
+        TopoDS_Builder cBuilder;
+        TopoDS_Compound merged;
+        cBuilder.MakeCompound(merged);
+        scalar zStart = gInfo.starts[z_index] + gInfo.spaces[z_index] * -1;
+        scalar zEnd = gInfo.starts[z_index] + gInfo.spaces[z_index] * ( gInfo.nsteps[z_index] + 1);
+
+        for (size_t r=0; r< gInfo.nsteps[r_index] + 1; r++)
+        {
+            double r_value = gInfo.starts[r_index] + gInfo.spaces[r_index] * r;
+            for (size_t c=0; c< gInfo.nsteps[c_index] + 1; c++)
+            {
+                double c_value = gInfo.starts[c_index] + gInfo.spaces[c_index] * c;
+                // create the curve, then surface, IntCS
+                gp_Pnt p1; 
+                p1.SetCoord(r_index+1, r_value);
+                p1.SetCoord(c_index+1, c_value); 
+                p1.SetCoord(z_index+1, zStart);
+                gp_Pnt p2 = p1;
+                p2.SetCoord(z_index+1, zEnd);
+
+                auto e = BRepBuilderAPI_MakeEdge(p1, p2).Edge();
+
+                cBuilder.Add(merged, e);
+            }
+        }
+
+        //cBuilder.Add(merged, shape);
+        BRepTools::Write(merged, (input + ORTH_NAMES[iaxis] + "_grid.brep").c_str());
+    }
+}
 
 /// find after faceting, 
 void save_data(IntersectionData& data, const std::string& output_file_stem, 
@@ -289,7 +330,7 @@ void save_data(IntersectionData& data, const std::string& output_file_stem,
             if(std::size(error_pos) > 0)
             {
                 std::cout << "Warning: total number of odd thickness vector size " << std::size(error_pos) << 
-                    ",  less than threshold " <<  error_threshold * 100 << " percentage, will be interpolated\n";
+                    ",  less than threshold " <<  error_threshold * 100 << " percentage, will be interpolated for " << PNAMES[i] << "\n";
                 interoplate_thickness(error_pos, im);
             }
             #if USE_OPENCV
@@ -305,6 +346,9 @@ void save_data(IntersectionData& data, const std::string& output_file_stem,
             #endif
         }
     }
+#if DUMP_GRID
+    dump_grid(gInfo, output_file_stem);
+#endif
 }
 
 
@@ -391,7 +435,7 @@ int bop(std::string input, const std::string& output_file_stem)
         }
 
         save_image(im, output_file_stem + "_BOP" + PNAMES[iaxis] + IM_SUFFIX);
-#if DUMP_BOP_GRID
+#if DUMP_GRID
         cBuilder.Add(merged, shape);
         BRepTools::Write(merged, (output_file_stem + PNAMES[iaxis] + "_grid.brep").c_str());
 #endif
@@ -514,12 +558,14 @@ void calc_thickness_bop(const TopoDS_Shape& shape, const GridInfo& gInfo, Inters
         #if DUMP_BOP_INTERSECTED_EDGES
         BRepTools::Write(merged1, ("debug_bop_intersected_" + ORTH_NAMES[iaxis] + "_edges.brep").c_str());
         #endif
-#if DUMP_BOP_GRID
+#if DUMP_GRID
         cBuilder.Add(merged, shape);
         BRepTools::Write(merged, ("debug_bop" + ORTH_NAMES[iaxis] + "_grid.brep").c_str());
 #endif
     }
 }
+
+
 
 /// triangulation, fast less precise than BOP
 int project_geom(std::string input, const std::string& output_file_stem, int projection_id, bool bop = false)
@@ -546,7 +592,7 @@ int project_geom(std::string input, const std::string& output_file_stem, int pro
         for(const auto& f: *faces)
         {
             mesh.triangles = generate_mesh(f, mesh.local_transform, linDefl);
-            calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
+            calc_intersections(mesh.triangles, mesh.grid_info, &mesh.local_transform, data);
         }
     }
 
@@ -562,7 +608,7 @@ int project_geom(std::string input, const std::string& output_file_stem, int pro
     }
 
 
-#if DUMP_PART_MESH
+#if 0 // DUMP_PART_MESH
     auto stl_exporter = StlAPI_Writer(); // high level API
     stl_exporter.Write(shape, (input + "_meshed.stl").c_str()); 
     // shape must has mesh for each face
@@ -585,11 +631,14 @@ int project_mesh(std::string input, const std::string& output_file_stem, int pro
     mesh.triangles = rotated_mesh;
     mesh.grid_info = generate_grid(calc_mesh_boundbox(mesh.triangles));
     // 
-    calc_intersections(mesh.triangles, mesh.grid_info, mesh.local_transform, data);
+    calc_intersections(mesh.triangles, mesh.grid_info, nullptr, data);
 
     // save thickness matrix as numpy array,  scale it?  save as image?
     save_data(data, output_file_stem, mesh.grid_info, *PROJ_NAMES[projection_id]);
 
+#if DUMP_PART_MESH
+    write_mesh(mesh.triangles, input + "_transformed.stl");
+#endif
     return 0;
 }
 
@@ -659,7 +708,8 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
 
-
+    test_calc_intersection(true);
+    test_calc_intersection(false);
 
     USE_OBB = program.get<bool>("--obb");  // set global variable
     USE_CUBE_BOX = program.get<bool>("--cube");
