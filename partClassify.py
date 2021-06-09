@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-
+the main app for part classification
 """
 
 
@@ -39,7 +39,7 @@ if _debug:
 else:
     tf.get_logger().setLevel('ERROR')
 
-# Set CPU as available physical device
+# Set CPU as available physical device, to suppress GPU not found error
 my_devices = tf.config.experimental.list_physical_devices(device_type='CPU')
 tf.config.experimental.set_visible_devices(devices= my_devices, device_type='CPU')
 

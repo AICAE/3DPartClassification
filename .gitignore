@@ -1,5 +1,8 @@
 test*/*
 */build/*
+notes/*
+occProjector/*
+paper*/
 
 stage/*
 */*.png
