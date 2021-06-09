@@ -4,10 +4,13 @@ need FreeCAD daily after Nov 2020
 import sys
 import os
 
-sys.path.append("/usr/lib/freecad-daily-python3/lib")
-# /usr/lib/freecad-daily/Mod
-import FreeCAD as App
-import Mesh
+try:
+    sys.path.append("/usr/lib/freecad-daily-python3/lib")
+    # /usr/lib/freecad-daily/Mod
+    import FreeCAD as App
+    import Mesh
+except:
+    pass  # it is fine to failed during training stage
 
 def convertMesh(input, output):
     Mesh.open(input)

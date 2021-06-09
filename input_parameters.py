@@ -9,7 +9,8 @@ import glob
 
 from global_config import *
 
-generatingMultiViewImage = not generatingThicknessViewImage  # deprecated
+generatingMultiViewImage = not generatingThicknessViewImage
+# generatingMultiViewImage is deprecated
 usingGrayscaleImage = not generatingThicknessViewImage
 # also generate meta data for CAD geometry like step file
 
@@ -152,7 +153,7 @@ ThicknessViewApp = os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "o
 # usage   --bbox
 if not os.path.exists(ThicknessViewApp):
     print(ThicknessViewApp, " not found, check your path in your parameter file")
-    sys.exit(1)
+    #sys.exit(1)
 
 # can also be a python script
 MultiViewApp=os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occQt/occQt"
@@ -249,10 +250,12 @@ if generatingMultiViewImage:
 else:
     if usingOnlyThicknessChannel:
         _saved_model_name = "thickness_" +  _saved_model_name
+    elif usingOnlyDepthmapChannel:
+        _saved_model_name = "depthmap_" +  _saved_model_name
     else:
         _saved_model_name = "DT_" +  _saved_model_name
 
-saved_model_filepath = dataset_dir_path + os.path.sep + _saved_model_name
+saved_model_filepath = dataset_dir_path + os.path.sep + _saved_model_name + ".h5"
 
 
 modelnet40_classes = ['airplane','bathtub','bed','bench','bookshelf','bottle','bowl','car','chair',

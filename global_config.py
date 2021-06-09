@@ -1,11 +1,17 @@
-INPUT_DATA_DIR = "/media/qxia/QingfengXia/AICAE_DataDir/"
-DATA_DIR="/mnt/windata/DataDir/"
+import platform
+
+if platform.system() == "Linux":
+    INPUT_DATA_DIR = "/media/qxia/QingfengXia/AICAE_DataDir/"
+    DATA_DIR="/mnt/windata/DataDir/"
+else:
+    INPUT_DATA_DIR = "D:/DataDir/"
+    DATA_DIR="D:/DataDir/"
 
 #dataset_name = "Thingi10K"      # all data in one folder, do not use, categorization not ideal
-#dataset_name =  "ModelNet"       #  has two variants, modelnet10 and modelnet40
+dataset_name =  "ModelNet"       #  has two variants, modelnet10 and modelnet40
 isModelNet40 = False
 isModelNet40Aligned = False
-dataset_name = "FreeCAD_lib"   # Mechanical CAD part library
+#dataset_name = "FreeCAD_lib"   # Mechanical CAD part library
 #dataset_name = "KiCAD_lib"       # ECAD KiCAD library
 minimum_sample_count = 20
 
@@ -25,7 +31,9 @@ usingTriView = False  # not impl yet
 usingKerasTuner = False
 
 generatingThicknessViewImage = True # also generate meta data for CAD geometry like step file
-usingOnlyThicknessChannel = False  # if False, use thickness and depth
+usingOnlyThicknessChannel = True  # if False, use thickness and depth
+usingOnlyDepthmapChannel = False  # if False, use thickness and depth
 channel_count = 2 if generatingThicknessViewImage else 1
-channel_count = 1 if usingOnlyThicknessChannel else channel_count
+channel_count = 1 if usingOnlyThicknessChannel or usingOnlyDepthmapChannel else channel_count
+depthmap_channel = 0  # first channel
 thickness_channel = 1  # second channel

@@ -8,7 +8,7 @@ _debug = True
 _using_saved_model = True # 
 
 BATCH_SIZE = 100  # if dataset is small, make this bigger
-EPOCH_COUNT = 10
+EPOCH_COUNT = 100
 INIT_LEARN_RATE = 1e-4  # batch_normalization needs a slightly bigger learning rate
 RESTART_LR = INIT_LEARN_RATE * 0.1
 
@@ -21,9 +21,9 @@ import json
 import tempfile
 
 
-from input_parameters import dataset_name, model_input_shape, channel_count, thickness_channel, \
-    processed_metadata_filepath, processed_imagedata_filepath, saved_model_file, \
-    usingOnlyThicknessChannel, usingMixedInputModel, usingKerasTuner, usingMaxViewPooling
+from global_config import dataset_name,  channel_count, thickness_channel, depthmap_channel,  \
+    usingOnlyThicknessChannel, usingOnlyDepthmapChannel, usingMixedInputModel, usingKerasTuner, usingMaxViewPooling
+from input_parameters import view_count, model_input_shape, processed_metadata_filepath, processed_imagedata_filepath, saved_model_filepath
 from stratify import my_split
 
 # before import tensorflow
@@ -81,12 +81,14 @@ print("[INFO] loaded images ndarray shape from file", images.shape, images.dtype
 
 if len(images.shape) == 5:
     if usingOnlyThicknessChannel:
-        images = images[:, :, :, :, thickness_channel]  # choose only the thickness channel
+        images = images[:, :view_count, :, :, thickness_channel]  # choose only the thickness channel
+    elif usingOnlyDepthmapChannel:
+        images = images[:, :view_count, :, :, depthmap_channel]  # choose only the thickness channel
     else:
-        images = images[:, :, :, :, :channel_count]  # choose the depth and thickness channels
+        images = images[:, :view_count, :, :, :channel_count]  # choose the depth and thickness channels
 
 
-if images.shape[-1] > 3  and len(model_input_shape) > len(images.shape)-1  and model_input_shape[-1]==1:  
+if images.shape[-1] > 3  and len(model_input_shape) > len(images.shape)-1  and model_input_shape[-1] == 1:  
     # if single channel does not have its dim
     new_shape = [images.shape[0]] + list(model_input_shape)
     images = np.reshape(images, new_shape)
@@ -297,13 +299,13 @@ if usingKerasTuner:
                 callbacks=[tf.keras.callbacks.EarlyStopping(patience=1)])
 
     best_model = tuner.get_best_models(1)[0]
-    best_model.save(saved_model_file)
+    best_model.save(saved_model_filepath)
 else:
 
-    if _using_saved_model and os.path.exists(saved_model_file):
-        print("[INFO] load previously saved model file: ", saved_model_file)
+    if _using_saved_model and os.path.exists(saved_model_filepath):
+        print("[INFO] load previously saved model file: ", saved_model_filepath)
 
-        model = tensorflow.keras.models.load_model(saved_model_file)
+        model = tensorflow.keras.models.load_model(saved_model_filepath)
         model_loaded = True
     else:
 
@@ -343,7 +345,7 @@ else:
     #####################################
     # save the model and carry on model fit in a second run
     # https://www.tensorflow.org/guide/keras/save_and_serialize
-    model.save(saved_model_file, save_format='h5')
+    model.save(saved_model_filepath, save_format='h5')
     # save_format='h5' is fine if tf.debugging is enabled, for some dtype cause error for save_format = 'tf'.
 
     # convert the history.history dict to a pandas DataFrame:
@@ -351,7 +353,7 @@ else:
     hist_df = pd.DataFrame(history.history) 
 
     # save to json:  
-    hist_json_file = saved_model_file + '.json' 
+    hist_json_file = saved_model_filepath + '.json' 
     with open(hist_json_file, mode='w') as f:
         hist_df.to_json(f)
 

@@ -20,7 +20,10 @@ splittingProfileCategory = True
 supported_input_file_suffices = set(["stp", "step"])  # "FCStd"
 input_file_suffix = "brep"
 
-from partConverter import convert
+try:
+    from partConverter import convert
+except Exception as e:
+    print("Warning: failed to import partConverter", e)
 
 ###########################
 # generate image by python + command line program written in C++

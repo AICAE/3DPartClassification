@@ -11,8 +11,8 @@ append_freecad_mod_path()
 try:
     import FreeCAD
 except ImportError:
-    print("freecad is not installed or detectable, exit from this script")
-    sys.exit(0)
+    print("Warning: freecad is not installed or detectable, exit from this script")
+    #sys.exit(-1)
 
 # version check
 import FreeCAD as App
