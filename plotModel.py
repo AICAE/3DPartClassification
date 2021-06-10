@@ -15,16 +15,16 @@ if not os.path.exists(result_dir):
     os.mkdir(result_dir)
 dot_img_file = f'{result_dir}/{saved_model_name}_model.png'
 model = tf.keras.models.load_model(saved_model_filepath)
-tf.keras.utils.plot_model(model, to_file=dot_img_file, show_shapes=True)
+# failed on windows,
+#tf.keras.utils.plot_model(model, to_file=dot_img_file, show_shapes=True)
 
 model.summary()
 
 # save to json:
-hist_json_files = [saved_model_file + '.json']
+hist_json_files = [saved_model_filepath + '.json']
 frames = []
 for i, jf in enumerate(hist_json_files):
-
-    frames.append(pd.read_json(hist_json_file))
+    frames.append(pd.read_json(jf))
 
 history = pd.concat(frames)
 loss_figure_file = f'{result_dir}/{saved_model_name}_loss.png'
@@ -41,7 +41,7 @@ plt.title(saved_model_name)
 plt.legend(loc='lower right')
 
 plt.show()
-savefig(loss_figure_file, plt.gcf())
+plt.savefig(loss_figure_file, plt.gcf())
 
 
 

@@ -10,7 +10,7 @@ import glob
 from global_config import *
 
 generatingMultiViewImage = not generatingThicknessViewImage
-# generatingMultiViewImage is deprecated
+# generatingMultiViewImage to eval/repeat MVCNN is deprecated
 usingGrayscaleImage = not generatingThicknessViewImage
 # also generate meta data for CAD geometry like step file
 
@@ -122,7 +122,7 @@ if generatingThicknessViewImage:
 ##########################
 # preprocessing  meshlib meshed part dataset_metadata_filename
 ##########################
-if isMeshFile:
+if isMeshFile and isPreprocessing:
     supported_input_file_suffices = set(["off", "stl"])  #  freecad/meshio support a few mesh format, off
     input_file_suffix = "stl"
     # stl is the only format needed for view generator
@@ -146,23 +146,22 @@ if isMeshFile:
             print("failed to convert ", input, str(out), str(error))
         return p.returncode == 0
 
+if isPreprocessing:
+    ###############view app output control ############
+    # generate image by python + command line program written in C++
+    ThicknessViewApp = os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occProjector/build/occProjector"
+    # usage   --bbox
+    if not os.path.exists(ThicknessViewApp):
+        print(ThicknessViewApp, " not found, check your path in your parameter file")
+        sys.exit(1)
 
-###############view app output control ############
-# generate image by python + command line program written in C++
-ThicknessViewApp = os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occProjector/build/occProjector"
-# usage   --bbox
-if not os.path.exists(ThicknessViewApp):
-    print(ThicknessViewApp, " not found, check your path in your parameter file")
-    #sys.exit(1)
-
-# can also be a python script
-MultiViewApp=os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occQt/occQt"
-# Usage: occQt input_file.brep image_file_stem
-# will generate 0.png 1.png 2.png files, not sufficient, in each folder, there may be more than one brep files
+    # can also be a python script
+    MultiViewApp=os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occQt/occQt"
+    # Usage: occQt input_file.brep image_file_stem
+    # will generate 0.png 1.png 2.png files, not sufficient, in each folder, there may be more than one brep files
 
 ##############################
 image_suffix = ".png"
-view_count = 3
 
 ############## image preprocessing ############
 binarizingImage = not generatingThicknessViewImage
@@ -245,7 +244,10 @@ if usingCubeBoundBox:
 if usingMaxViewPooling:
     _saved_model_name = "maxviewpooling_" +  _saved_model_name
 
-if generatingMultiViewImage:
+if view_count != 3:
+    _saved_model_name = str(view_count) + "View_" +  _saved_model_name
+
+if generatingMultiViewImage:  # MVCNN
     _saved_model_name = "multiview_" +  _saved_model_name
 else:
     if usingOnlyThicknessChannel:
