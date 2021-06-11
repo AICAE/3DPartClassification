@@ -17,7 +17,7 @@ from tensorflow.keras.layers.experimental.preprocessing import RandomFlip, Rando
 
 
 
-class TDModel(object):
+class DTVModel(object):
     """ Thickness and depth dual channel
     tuner is also supported, if 
     """

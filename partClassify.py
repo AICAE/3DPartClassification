@@ -7,8 +7,8 @@ the main app for part classification
 _debug = True
 _using_saved_model = True # 
 
-BATCH_SIZE = 100  # if dataset is small, make this bigger
-EPOCH_COUNT = 100
+BATCH_SIZE = 50  # if dataset is small, make this bigger
+EPOCH_COUNT = 50
 INIT_LEARN_RATE = 1e-4  # batch_normalization needs a slightly bigger learning rate
 RESTART_LR = INIT_LEARN_RATE * 0.1
 
@@ -64,7 +64,7 @@ from sklearn.preprocessing import OrdinalEncoder, LabelEncoder, OneHotEncoder
 from sklearn.model_selection import train_test_split
 
 
-from tf_model import TDModel
+from DTVmodel import DTVModel
 
 # construct the argument parser and parse the arguments
 #ap = argparse.ArgumentParser()
