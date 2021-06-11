@@ -7,9 +7,9 @@ the main app for part classification
 _debug = True
 _using_saved_model = True # 
 
-BATCH_SIZE = 50  # if dataset is small, make this bigger
+BATCH_SIZE = 500  # if dataset is small, make this bigger
 EPOCH_COUNT = 50
-INIT_LEARN_RATE = 1e-4  # batch_normalization needs a slightly bigger learning rate
+INIT_LEARN_RATE = 2e-4  # batch_normalization needs a slightly bigger learning rate
 RESTART_LR = INIT_LEARN_RATE * 0.1
 
 import numpy as np
@@ -24,7 +24,6 @@ import tempfile
 from global_config import dataset_name,  channel_count, thickness_channel, depthmap_channel,  \
     usingOnlyThicknessChannel, usingOnlyDepthmapChannel, usingMixedInputModel, usingKerasTuner, usingMaxViewPooling
 from input_parameters import view_count, model_input_shape, processed_metadata_filepath, processed_imagedata_filepath, saved_model_filepath
-from stratify import my_split
 
 # before import tensorflow
 import logging
@@ -65,6 +64,7 @@ from sklearn.model_selection import train_test_split
 
 
 from DTVmodel import DTVModel
+from stratify import my_split
 
 # construct the argument parser and parse the arguments
 #ap = argparse.ArgumentParser()
@@ -73,7 +73,7 @@ from DTVmodel import DTVModel
 #args = vars(ap.parse_args())
 
 ##################################
-print("[INFO] loading classification data in metadata file")
+print("[INFO] loading classification data in metadata file: ", processed_metadata_filepath)
 df = pd.read_json(processed_metadata_filepath)
 
 images = np.load(processed_imagedata_filepath)  # pickle array of object type: allow_pickle=True
@@ -208,7 +208,7 @@ print("[INFO] split data...")
 #split = train_test_split(df, images, test_size=0.25, random_state=42)
 #(trainDataset, testDataset, trainImagesX, testImagesX) = split
 
-if dataset_name == "ModelNet":
+if dataset_name.find("ModelNet") >= 0:
     train_folder_name="train"
 else:
     train_folder_name=None
@@ -280,7 +280,7 @@ opt = Adam(lr=INIT_LEARN_RATE, beta_1=0.7, decay=1e-5 )  #  1e-5 / 200
 if usingKerasTuner:
     print("[INFO] use keras tuner")
     def build_model(hp):
-        model = TDModel(model_settings, hp).create_model(im_shape = model_input_shape, mlp_shape = trainAttrX.shape)
+        model = DTVModel(model_settings, hp).create_model(im_shape = model_input_shape, mlp_shape = trainAttrX.shape)
         model.compile(loss="categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
         return model
 
@@ -309,7 +309,7 @@ else:
         model_loaded = True
     else:
 
-        model = TDModel(model_settings).create_model(im_shape = model_input_shape, mlp_shape = trainAttrX.shape)
+        model = DTVModel(model_settings).create_model(im_shape = model_input_shape, mlp_shape = trainAttrX.shape)
 
         # the loss functions depends on the problem itself, for multiple classification 
         if True:
@@ -352,8 +352,12 @@ else:
     import pandas as pd 
     hist_df = pd.DataFrame(history.history) 
 
-    # save to json:  
-    hist_json_file = saved_model_filepath + '.json' 
+    # save to json or appending to existing json hist file:  
+    hist_json_file = saved_model_filepath + '.json'
+    if os.path.exists(hist_json_file) and _using_saved_model:
+        existing_df = pd.read_json(hist_json_file)
+        hist_df = pd.concat([existing_df, hist_df], axis = 0)
+        hist_df.index = pd.Index(range(hist_df.shape[0]))  # reset index
     with open(hist_json_file, mode='w') as f:
         hist_df.to_json(f)
 

@@ -18,15 +18,18 @@ from tensorflow.keras.layers.experimental.preprocessing import RandomFlip, Rando
 
 
 class DTVModel(object):
-    """ Thickness and depth dual channel
-    tuner is also supported, if 
+    """ MLP + CNN on Thickness and depth dual channel views
+    KerasTuner is also supported
+    param: config:  config (settings) dict 
     """
-    def __init__(self, s, hp=None):
-        self.settings = s
-        self.total_classes = s["total_classes"]
-        self.usingMixedInputs = s["usingMixedInputs"]
-        self.image_width = s["image_width"]
-        self.usingMaxViewPooling = s["usingMaxViewPooling"]
+    def __init__(self, config, hp=None):
+        self.settings = config
+        self.total_classes = config["total_classes"]
+        self.usingMixedInputs = config["usingMixedInputs"]
+        self.image_width = config["image_width"]
+        self.usingMaxViewPooling = config["usingMaxViewPooling"]
+        self.usingDataAugmentation = True
+        self.usingBatchNormal = True
 
         if hp:
             self.mlp_dense_p = 16 # hp.Int('units', min_value = 16, max_value = 32, step = 8)
@@ -56,9 +59,7 @@ class DTVModel(object):
             self.out_dense_p = 256
             self.cnn_dense_dropout_p = 0.6
 
-        self.usingDataAugmentation = True
-        self.usingBatchNormal = True
-        self.regress=s["regress"]
+        self.regress=config["regress"]
 
     def create_mlp(self, dim):
         # define our MLP network

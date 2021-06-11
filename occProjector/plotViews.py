@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np 
+import numpy as np
 from matplotlib import pyplot as plt
 import sys
 import glob
@@ -22,15 +22,19 @@ if not os.path.isabs(default_input_stem) and os.path.exists("occProjector"):
 bop = False
 usingPNG = True
 using3D = False  # very slow
+mergingDTchannels = True
 
 vmin, vmax = 0.0, 1.0
-view_names = ["_XY", "_YZ", "_ZX"]
+view_names = ["_XY", "_YZ", "_ZX"]  ## file suffix name
+view_full_names = ["XY axis", "YZ Axis", "ZX Axis"]
 
 if usingPNG:
     suffix = ".png"
     nrows = len(view_names)
     ncols = 3
-    channel_names = ["depth", "thickness", "back_depth"]
+    channel_names = ["depth map", "thickness map", "back_depth"]
+    if mergingDTchannels:
+        channel_names[2] = "depth and thickness"
 else:
     suffix = ".csv"
     nrows = 1
@@ -60,7 +64,7 @@ def plot_projection_views(outputfile_stem, usingTriView = False):
     if using3D:
         fig = plt.figure(figsize=(24, 32))
     else:
-        fig, axs = plt.subplots(nrows, ncols)
+        fig, axs = plt.subplots(nrows, ncols, figsize=(15, 20))
     fig.suptitle('Vertically stacked subplots')
 
     #input_files = glob.glob(outputfile_stem + "*.csv")
@@ -84,15 +88,18 @@ def plot_projection_views(outputfile_stem, usingTriView = False):
                     Y = np.arange(vmin, vmax, (vmax - vmin)/ny)
                     X, Y = np.meshgrid(X, Y)
                     Z = im[:, :, ch]
-                    ax.plot_surface(X, Y, Z, rstride=1, cstride=1, 
+                    ax.plot_surface(X, Y, Z, rstride=1, cstride=1,
                        linewidth=0, antialiased=False)
                     ax.set_zlim(vmin-0.05, vmax+0.05)  # hide the thickness of zero, is that possible? histgram/bar?
                 else:
                     ax = axs[i, ch]
-                    ax.imshow(im[:, :, ch])
+                    if ch == 2 and mergingDTchannels:
+                        ax.imshow(im[:, :, :])
+                    else:
+                        ax.imshow(im[:, :, ch])
                     # todo: set colormap vmin and vmax to to same
                 ax.set_axis_off()
-                ax.set_title(view_names[i]+ " " + channel_names[ch])
+                ax.set_title(view_full_names[i]+ " " + channel_names[ch])
                 #ax.legend()
 
     plt.show()

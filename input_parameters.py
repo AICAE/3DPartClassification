@@ -5,6 +5,7 @@ import os.path
 import json
 import subprocess
 import shutil
+import sys
 import glob
 
 from global_config import *
@@ -61,7 +62,7 @@ if dataset_name == "Thingi10K":
         # collect from  output folder
 
     ###########################
-elif dataset_name == "ModelNet":
+elif dataset_name.find("ModelNet") >= 0:
     isMeshFile = True    # choose between  part and mesh input format
     # off mesh file is not manifold, cause error in thickness view generation
     hasPerfileMetadata  = False  # where is the metadata like tag and c
@@ -167,7 +168,7 @@ image_suffix = ".png"
 binarizingImage = not generatingThicknessViewImage
 compressingImage = False and binarizingImage
 concatingImage = False # do not concat !!!, so image can be flipped, and have view pooling
-paddingImage = False  # let tensorflow do random padding for data augmentation
+paddingImage = False  # let tensorflow do random padding for data augmentation, padding decrease accurary
 
 ## image pixel size has been hardcoded into view image generator apps
 if generatingThicknessViewImage:
@@ -211,25 +212,26 @@ if not os.path.exists(dataset_dir_path):
 dataset_metadata_filepath = output_root_path + os.path.sep + dataset_metadata_filename
 
 
-_processed_metadata_filename = "processed_" + dataset_metadata_filename
-if compressingImage:
-    _processed_imagedata_filename = "compressed_imagedata.npy"
-else:
-    _processed_imagedata_filename = "processed_imagedata.npy"
+_processed_imagedata_filename = dataset_name + "_imagedata.npy"
 
 if not concatingImage:
-    _processed_imagedata_filename = "nview_" + _processed_imagedata_filename
+    _processed_imagedata_filename = str(view_count) + "view_" + _processed_imagedata_filename
 
 if usingCubeBoundBox:
     _processed_imagedata_filename = "cubebox_" + _processed_imagedata_filename
-    _processed_metadata_filename = "cubebox_" + _processed_metadata_filename
+
+if compressingImage:
+    _processed_imagedata_filename = "compressed_" + _processed_imagedata_filename
+else:
+    _processed_imagedata_filename = "processed_" + _processed_imagedata_filename
 
 processed_imagedata_filepath = dataset_dir_path + os.path.sep + _processed_imagedata_filename
+_processed_metadata_filename = _processed_imagedata_filename[:-14] + "_metadata.json"
 processed_metadata_filepath = dataset_dir_path + os.path.sep + _processed_metadata_filename
 ######################################################################################
 ## saved model file to continue model fit
 _saved_model_name = dataset_name
-if dataset_name == "ModelNet":
+if dataset_name.find("ModelNet") >= 0:
     if isModelNet40:
         _saved_model_name = "ModelNet40"
     else:
