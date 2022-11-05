@@ -47,6 +47,7 @@ from shutil import which
 import platform
 import os.path
 
+DEFAULT_FC_LIB_PATH = r"D:\Software\FreeCAD\lib"
 
 def is_executable(name):
     """Check whether `name` is on PATH and marked as executable.
@@ -114,6 +115,7 @@ def get_freecad_lib_path():
         else:
             return None
     elif os_name == "Windows":
+        return DEFAULT_FC_LIB_PATH
         return get_lib_path_on_windows(fc_name)
     elif os_name == "Darwin":
         raise NotImplementedError("MACOS is not supported yet")

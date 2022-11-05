@@ -1,3 +1,8 @@
+"""
+generate view imange from CAD files
+"""
+
+
 import os.path, shutil, os, sys
 import glob, stat
 #import zmq
@@ -7,12 +12,12 @@ import subprocess
 from collections import OrderedDict
 
 _debug = True
-using_threading = True  # False, can help in debugging
-regenerating_images = False
-resumable = False  # carry on work left, Registry can not resume for the time being
-existing_dataset = {}
 
 from input_parameters import *
+regenerating_images = testing
+using_threading = not testing # False, can help in debugging during testing
+resumable = not testing  # carry on work left, Registry can not resume for the time being
+existing_dataset = {}
 
 if not os.path.exists(output_root_path):
    os.makedirs(output_root_path)
@@ -34,7 +39,7 @@ def get_filename_stem(input_filename):
 def generate_view_cmd(is_thickness, input_filename, output_filepath_stem, info):
     # depends on input_parameter.py
     if is_thickness==True:
-        args = ["--grid", str(im_width), str(im_width), str(im_width)]   
+        args = ["--grid", str(im_width), str(im_width), str(im_width)]
         if usingBOP:
             args.append("--bop")
         if usingCubeBoundBox:
@@ -51,14 +56,14 @@ def generate_view_cmd(is_thickness, input_filename, output_filepath_stem, info):
 
         if isMeshFile:
             assert info
-            args += ["--bbox"] + [ str(v) for v in info["bbox"]] 
+            args += ["--bbox"] + [ str(v) for v in info["bbox"]]
             cmd = [ThicknessViewApp, input_filename, "-o", output_filepath_stem] + args
             print(" ".join(cmd))
         else:
             cmd = [ThicknessViewApp, input_filename, "-o", output_filepath_stem] + args
-    else:   # multi view 
+    else:   # multi view
         cmd = [MultiViewApp, input_filename]
-    
+
     return cmd
 
 def generate_view_images(input_filename, is_thickness=True, working_dir=None, info=None):
@@ -94,7 +99,7 @@ def generate_view_images(input_filename, is_thickness=True, working_dir=None, in
     #sys.exit()  # debugging stop after processing the first file
 
 def generate_output_file_path(file_path):
-    # get relative path, then append with 
+    # get relative path, then append with
     rel = os.path.relpath(os.path.abspath(file_path), input_root_path)
     out = output_root_path + os.path.sep + rel
     if not os.path.exists(os.path.dirname(out)):
@@ -129,7 +134,7 @@ def generate_file_registry(file_path):
     category_relative_path = os.path.relpath(head, input_root_path)
     categories = get_category_names(category_relative_path)
     info={"filename":  tail,   # todo, filename without path may be not unique
-              "category": categories[0], 
+              "category": categories[0],
               "path": category_relative_path}
     if len(categories) > 1:
         info["subcategories"] = categories[1:]
@@ -159,7 +164,7 @@ def process_error(filename):
 
 def is_conversion_required(input_file_path):
     _input_suffix = input_file_path.split()[-1]
-    convertingGeometry = not input_file_path.endswith(input_file_suffix) 
+    convertingGeometry = not input_file_path.endswith(input_file_suffix)
     return convertingGeometry
 
 def _process_input_file(input_file_path, output_file_path):
@@ -185,7 +190,7 @@ def _process_input_file(input_file_path, output_file_path):
         input_file = output_file_path
     else:
         input_file = input_file_path
-    
+
     if not os.path.exists(input_file):
         if _debug:
             print("input file is not found (conversion failed): ", input_file)
@@ -259,7 +264,7 @@ def process_folder(input_folder, output_folder, level=0):
 
         elif suffix == "fcstd" and not input_file_exists(input_file):
             #register_file(input_file) # data racing, must be run in main thread
-            #process_fcstd_file(fullname, output_file_path)  
+            #process_fcstd_file(fullname, output_file_path)
             # FCStd is too complicated to  select and convert
             pass
         elif suffix== "brep":

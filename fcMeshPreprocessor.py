@@ -1,5 +1,6 @@
 """
 need FreeCAD daily after Nov 2020
+convert off mesh format to some other format and also calc properties like bbox, volume
 """
 import sys
 import os
@@ -27,9 +28,9 @@ def convertMesh(input, output):
     del __objs__
 
     App.closeDocument("Unnamed")
-    # from OCCT part,  obb can be calculated 
+    # from OCCT part,  obb can be calculated
     # center
-    info = {"volume": volume, "area": area, 
+    info = {"volume": volume, "area": area,
         "bbox":  [bbox.XMin, bbox.YMin, bbox.ZMin, bbox.XMax, bbox.YMax, bbox.ZMax]}
     return info
 
@@ -48,11 +49,11 @@ def generateMetadata(input):
 
     App.closeDocument("Unnamed")
     # from OCCT part,  obb can be calculated  center
-    info = {"volume": volume, "area": area, 
+    info = {"volume": volume, "area": area,
         "bbox":  [bbox.XMin, bbox.YMin, bbox.ZMin, bbox.XMax, bbox.YMax, bbox.ZMax]}
     return info
 
-#project 
+#project
 if __name__ == "__main__":
     input_root_path = "/mnt/windata/MyData/OneDrive/gitrepo/PartRecognition/"
     inputfile =  input_root_path + u"occProjector/data/mushroom.off"

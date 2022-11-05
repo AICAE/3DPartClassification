@@ -1,4 +1,5 @@
 """
+after DTV images has been generated, collect into
 For FreeCAD library parts dataset and Thingi10K dataset
 """
 
@@ -20,9 +21,14 @@ from input_parameters import dataset_name, output_root_path, dataset_metadata_fi
       generatingThicknessViewImage, processed_imagedata_filepath, processed_metadata_filepath
 from imagePreprocess import collectImages
 
+# here there is a bug output_root_path has not been updated
 if dataset_name == "FreeCAD_lib":
     from fclib_parameters import *
     output_root_path = "/mnt/windata/DataDir/freecad_library_output_thickness/"
+
+if dataset_name == "KiCAD_lib":
+    from kicad_parameters import *
+    output_root_path = "/media/qingfeng/kicad-packages3D_output_thickness/"
 
 dataset = []
 imagelist = []
@@ -82,7 +88,7 @@ if dataset_name == "Thingi10K":
 
         filefolder = output_root_path
         assert os.path.exists(filefolder)
-        input_file_stem = fileid           
+        input_file_stem = fileid
 
         image_stem = filefolder + os.path.sep + input_file_stem
         # check: return NoneType /mnt/windata/MyData/Thingi10K_dataset_output/196196
@@ -112,15 +118,22 @@ else:  # FreeCADLib,  or  ModelNet
                 for p in ['DIN1025-2 HE-B-Profiles',  'DIN1025-4 HE-M-Profiles', 'DIN1025-3 HE-A-Profiles', 'DIN1025-5 IPE-Profiles']:
                     if p in entry["path"]:
                         entry["path"] = entry["path"].replace(p, "DIN1025-Profiles" + os.path.sep + p)
-                        entry["category"] = "DIN1025-Profiles" 
+                        entry["category"] = "DIN1025-Profiles"
                 for p in ['EN10056 Equal Angle Bars',  'EN10056 Unequal Angle Bars']:
                     if p in entry["path"]:
                         entry["path"] = entry["path"].replace(p, "EN10056 Angle Bars" + os.path.sep + p)
                         entry["category"] = "EN10056 Angle Bars"
+
+        if dataset_name == "KiCAD_lib":
+            # specific dataset, filitering and adapting
+            pass
+
+        # from relative path to abspath
         filefolder = output_root_path + os.path.sep + entry["path"]
         metafolder = output_root_path + os.path.sep + entry["path"]
+        #print("filefolder = ", filefolder + os.path.sep + filename)
         assert os.path.exists(filefolder)
-        input_file_stem = filename[:filename.rfind('.')]                
+        input_file_stem = filename[:filename.rfind('.')]
 
         #images = glob.glob(filefolder + os.path.sep + input_file_stem +"*"+image_suffix)
         image_stem = filefolder + os.path.sep + input_file_stem
@@ -150,14 +163,16 @@ def filter(dataframe, imagelist, class_col_name = "category", minimum_sample_cou
     df = df.reset_index()
     df['orig_index'] = df.index   # images has the same order as df
     df.groupby([class_col_name])
-    #group_values = df[class_col_name].unique()  # return value list? 
+    #group_values = df[class_col_name].unique()  # return value list?
     table = df.groupby([class_col_name]).size().reset_index(name='counts')
     table = table[table['counts'] >= minimum_sample_count]
     classes = table[class_col_name]
     df_filtered = df[df[class_col_name].isin(classes)]
 
+    ## update image list squence to match sorted table df
     imglist = []
-    for i in df_filtered['orig_index'].to_numpy():
+    # use `values`` instead of `to_numpy()` AttributeError: 'Series' object has no attribute 'to_numpy'
+    for i in df_filtered['orig_index'].values:
         imglist.append(imagelist[i])
     return df_filtered, imglist
 

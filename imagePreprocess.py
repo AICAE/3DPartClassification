@@ -164,8 +164,10 @@ def test():
     print("rgb2gray(im): ", im.shape, im.dtype)
     #showImage(im, title="grayscale")  # still show as color
 
-    paddedShape = [64, 64] # should be about 110% of the input
-    im = padImage(im, paddedShape)
+    if paddingImage:  # padding lead to dropped accuracy by 4-6%
+        paddedShape = [64, 64] # should be about 110% of the input
+        im = padImage(im, paddedShape)
+
     #showImage(im, title="padd")
     print("first block", im[:block_size , :block_size])  # first block
     #im = binarizeImage(im)  # binarization will be done in image compression

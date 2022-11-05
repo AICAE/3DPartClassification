@@ -89,26 +89,7 @@ elif dataset_name.find("ModelNet") >= 0:
             dataset_metadata_filename = "ModelNet10_dataset.json"
 
 elif dataset_name == "KiCAD_lib":
-    isMeshFile = False
-    hasPerfileMetadata  = False
-    supported_input_file_suffices = set(["stp", "step"])
-    input_file_suffix = "step"
-    if testing:
-        input_root_path = "./testdata/testKiCAD_data"
-        output_root_path = input_root_path + "_output"
-        dataset_metadata_filename = "testKiCAD_dataset.json"
-    else:
-        input_root_path = INPUT_DATA_DIR + "kicad-packages3D"
-        output_root_path = INPUT_DATA_DIR + "kicad-packages3D_output"
-        dataset_dir_path = DATA_DIR + "kicad-packages3D"
-        dataset_metadata_filename = "kicad-packages3D_dataset.json"
-    
-    def isValidSubfolder(dir):
-        if not dir.endswith(".3dshapes"):
-            return False
-        if not testing and len(os.listdir(dir)) < 20:
-            return False
-        return True
+    from kicad_parameters import *
 
 elif dataset_name == "FreeCAD_lib":
     from fclib_parameters import *
@@ -147,19 +128,19 @@ if isMeshFile and isPreprocessing:
             print("failed to convert ", input, str(out), str(error))
         return p.returncode == 0
 
-if isPreprocessing:
-    ###############view app output control ############
-    # generate image by python + command line program written in C++
-    ThicknessViewApp = os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occProjector/build/occProjector"
-    # usage   --bbox
-    if not os.path.exists(ThicknessViewApp):
-        print(ThicknessViewApp, " not found, check your path in your parameter file")
-        sys.exit(1)
+#if isPreprocessing:
+###############view app output control ############
+# generate image by python + command line program written in C++
+ThicknessViewApp = os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occProjector/build/occProjector"
+# usage   --bbox
+if not os.path.exists(ThicknessViewApp):
+    print(ThicknessViewApp, " not found, check your path in your parameter file")
+    sys.exit(1)
 
-    # can also be a python script
-    MultiViewApp=os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occQt/occQt"
-    # Usage: occQt input_file.brep image_file_stem
-    # will generate 0.png 1.png 2.png files, not sufficient, in each folder, there may be more than one brep files
+# can also be a python script
+MultiViewApp=os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occQt/occQt"
+# Usage: occQt input_file.brep image_file_stem
+# will generate 0.png 1.png 2.png files, not sufficient, in each folder, there may be more than one brep files
 
 ##############################
 image_suffix = ".png"
@@ -168,7 +149,7 @@ image_suffix = ".png"
 binarizingImage = not generatingThicknessViewImage
 compressingImage = False and binarizingImage
 concatingImage = False # do not concat !!!, so image can be flipped, and have view pooling
-paddingImage = False  # let tensorflow do random padding for data augmentation, padding decrease accurary
+
 
 ## image pixel size has been hardcoded into view image generator apps
 if generatingThicknessViewImage:
@@ -177,7 +158,10 @@ if generatingThicknessViewImage:
         im_width, im_height = 60, 60   # generated
     else:
         im_width, im_height = 60, 60   # generated
-    model_input_width, model_input_height = im_width, im_height   # after padding, for input into tensorflow
+    if paddingImage:
+        model_input_width, model_input_height = 64, 64   # after padding, for input into tensorflow
+    else:
+        model_input_width, model_input_height = im_width, im_height
 else:
     im_width, im_height = 120, 120   # before padding
     # final image size to be learned by AI
@@ -240,7 +224,7 @@ if dataset_name.find("ModelNet") >= 0:
 if usingMixedInputModel:
     _saved_model_name = "mixedinput_" +  _saved_model_name
 else:
-    _saved_model_name = "imageonly_" +  _saved_model_name    
+    _saved_model_name = "imageonly_" +  _saved_model_name
 if usingCubeBoundBox:
     _saved_model_name = "cubebox_" +  _saved_model_name
 if usingMaxViewPooling:
