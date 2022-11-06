@@ -5,7 +5,7 @@
 import sys
 import os.path
 
-from detect_freecad import append_freecad_mod_path
+from detectFreeCAD import append_freecad_mod_path
 
 append_freecad_mod_path()
 try:

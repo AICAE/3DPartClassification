@@ -5,11 +5,11 @@ the main app for part classification
 
 
 _debug = True
-_using_saved_model = True # 
+_using_saved_model = True #
 
-BATCH_SIZE = 500  # if dataset is small, make this bigger
+BATCH_SIZE = 200  # if dataset is small, make this bigger
 EPOCH_COUNT = 50
-INIT_LEARN_RATE = 2e-4  # batch_normalization needs a slightly bigger learning rate
+INIT_LEARN_RATE = 5e-3  # batch_normalization needs a slightly bigger learning rate
 RESTART_LR = INIT_LEARN_RATE * 0.1
 
 import numpy as np
@@ -24,6 +24,9 @@ import tempfile
 from global_config import dataset_name,  channel_count, thickness_channel, depthmap_channel,  \
     usingOnlyThicknessChannel, usingOnlyDepthmapChannel, usingMixedInputModel, usingKerasTuner, usingMaxViewPooling
 from input_parameters import view_count, model_input_shape, processed_metadata_filepath, processed_imagedata_filepath, saved_model_filepath
+
+print("[INFO] loading classification data in metadata file: ", processed_metadata_filepath)
+df = pd.read_json(processed_metadata_filepath)
 
 # before import tensorflow
 import logging
@@ -73,8 +76,6 @@ from stratify import my_split
 #args = vars(ap.parse_args())
 
 ##################################
-print("[INFO] loading classification data in metadata file: ", processed_metadata_filepath)
-df = pd.read_json(processed_metadata_filepath)
 
 images = np.load(processed_imagedata_filepath)  # pickle array of object type: allow_pickle=True
 print("[INFO] loaded images ndarray shape from file", images.shape, images.dtype)
@@ -88,7 +89,7 @@ if len(images.shape) == 5:
         images = images[:, :view_count, :, :, :channel_count]  # choose the depth and thickness channels
 
 
-if images.shape[-1] > 3  and len(model_input_shape) > len(images.shape)-1  and model_input_shape[-1] == 1:  
+if images.shape[-1] > 3  and len(model_input_shape) > len(images.shape)-1  and model_input_shape[-1] == 1:
     # if single channel does not have its dim
     new_shape = [images.shape[0]] + list(model_input_shape)
     images = np.reshape(images, new_shape)
@@ -102,7 +103,7 @@ if dataset_name == "Thingi10K":
 
     FEATURES_INT = []
 
-else:  # FreeCADLib  or ModelNet
+else:  # FreeCAD_lib  or ModelNet or KiCAD_lib
     CATEGORY_LABEL="category"
     BBOX_LABEL="obb"
     categories = pd.Series(df["category"], dtype="category")
@@ -142,8 +143,8 @@ bbox_volume = np.prod(obb, axis=1)
 df["volume_bbox_ratio"] = df["volume"]/bbox_volume
 #print(df["bbox_max_length"])
 
-df["obb_ratio_1"]  = obb[:,0] / df["bbox_max_length"] 
-df["obb_ratio_2"]  = obb[:,1] / df["bbox_max_length"] 
+df["obb_ratio_1"]  = obb[:,0] / df["bbox_max_length"]
+df["obb_ratio_2"]  = obb[:,1] / df["bbox_max_length"]
 
 # axis, symmetric is an important feature
 
@@ -154,6 +155,8 @@ imageShape = images.shape
 FEATURES_RATIO = ["volume_bbox_ratio", "obb_ratio_1", "obb_ratio_2"]
 
 FLOAT_SCALED = ["area_linear", "volume_linear"]
+if dataset_name == "ModelNet40":
+    FLOAT_SCALED.append("bbox_max_length")
 # linear comparable
 df["area_linear"] = df["area"]**0.5
 df["volume_linear"] = df["volume"]**0.333333333333
@@ -164,7 +167,7 @@ scaler = MinMaxScaler().fit(df[raw_FEATURES])  ## input must be 2D array
 scaled_feature_array = scaler.fit_transform(df[raw_FEATURES])  # fine here, scaled to [0, 1]
 
 for i, c in enumerate(raw_FEATURES):  # feature_columns
-    df[c+"_scaled"] = scaled_feature_array[:, i]  
+    df[c+"_scaled"] = scaled_feature_array[:, i]
 
 ### bug: all scaled data are nan, why?
 
@@ -197,7 +200,7 @@ else:
 
 
 ###################################
-if _debug: 
+if _debug:
     print(list(df.columns))
 
 # partition the data into training and testing splits using 75% of
@@ -241,7 +244,7 @@ if _debug:
 #trainY = to_categorical(trainY)  #return None
 #testY = to_categorical(testY)
 
-# no category columns, 
+# no category columns,
 trainAttrX = pd.DataFrame(trainDataset, columns = FEATURES)
 testAttrX = pd.DataFrame(testDataset, columns = FEATURES)
 
@@ -263,7 +266,7 @@ model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
 import signal
 def keyboardInterruptHandler(signal, frame):
     print("KeyboardInterrupt (ID: {}) has been caught. Cleaning up...".format(signal))
-    # if save model, it that a reloadable model?  
+    # if save model, it that a reloadable model?
     exit(0)
 signal.signal(signal.SIGINT, keyboardInterruptHandler)
 
@@ -308,10 +311,10 @@ else:
         model = tensorflow.keras.models.load_model(saved_model_filepath)
         model_loaded = True
     else:
-
+        print("[INFO] create a new mode to save as: ", saved_model_filepath)
         model = DTVModel(model_settings).create_model(im_shape = model_input_shape, mlp_shape = trainAttrX.shape)
 
-        # the loss functions depends on the problem itself, for multiple classification 
+        # the loss functions depends on the problem itself, for multiple classification
         if True:
             model.compile(loss="categorical_crossentropy", optimizer=opt,  metrics=['accuracy'])
         else:
@@ -349,10 +352,10 @@ else:
     # save_format='h5' is fine if tf.debugging is enabled, for some dtype cause error for save_format = 'tf'.
 
     # convert the history.history dict to a pandas DataFrame:
-    import pandas as pd 
-    hist_df = pd.DataFrame(history.history) 
+    import pandas as pd
+    hist_df = pd.DataFrame(history.history)
 
-    # save to json or appending to existing json hist file:  
+    # save to json or appending to existing json hist file:
     hist_json_file = saved_model_filepath + '.json'
     if os.path.exists(hist_json_file) and _using_saved_model:
         existing_df = pd.read_json(hist_json_file)
@@ -375,8 +378,8 @@ else:
 
     print("[INFO] test loss, test acc:", results)
 
-    # compute the difference between the *predicted*  and the *actual*  
-    # # then compute the percentage difference 
+    # compute the difference between the *predicted*  and the *actual*
+    # # then compute the percentage difference
 
     # this is twice of loss evaluation
     # diff = preds - testY
@@ -385,3 +388,22 @@ else:
     # print("[INFO] validate prediction by test data, error percentage is: ", absPercentDiff)
 
     #########################################
+    # Backend Qt5Agg is interactive backend. Turning interactive mode on.
+    if False:
+        import matplotlib.pyplot as plt
+        y_l = range(10)
+        y_p = np.random.rand(10, 10)  # todo
+        confusion_mat = tensorflow.compat.v1.confusion_matrix(y_l,y_p)
+        def plot_confusion_matrix(confusion_mat):
+            plt.imshow(confusion_mat,interpolation='nearest',cmap=plt.cm.Paired)
+            plt.title('Confusion Matrix')
+            plt.colorbar()
+            tick_marks=np.arange(4)
+            plt.xticks(tick_marks,tick_marks)
+            plt.yticks(tick_marks,tick_marks)
+            plt.ylabel('True Label')
+            plt.xlabel('Predicted Label')
+            #plt.show()
+            plt.savefig(saved_model_filepath + '.png')
+
+        plot_confusion_matrix(confusion_mat)

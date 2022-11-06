@@ -10,8 +10,8 @@ DATA_DIR = os.path.abspath(os.path.dirname(__file__)) +os.path.sep + "DataDir"
 # if not found, use machine specific path, for developer
 if not os.path.exists(DATA_DIR):
     if platform.system() == "Linux":
-        INPUT_DATA_DIR = "/media/qingfeng/"
-        DATA_DIR="/media/qingfeng/"
+        INPUT_DATA_DIR = "/media/DataDir/"
+        DATA_DIR="/media/DataDir/"
     else:
         INPUT_DATA_DIR = "F:/AICAE_DataDir/"
         DATA_DIR = "F:/AICAE_DataDir/"
