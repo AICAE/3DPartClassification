@@ -16,8 +16,8 @@ FIND_PACKAGE(Eigen3 REQUIRED)
 
 
 # need to find either OCE or OCC
-if(TRUE)
-  FIND_PACKAGE(OCC QUIET)
+if(False)
+  FIND_PACKAGE(OCC QUIET COMPONENTS FoundationClasses;ModelingData;ModelingAlgorithms)
 
   IF(NOT OCE_FOUND AND NOT OCC_FOUND)
     MESSAGE(STATUS "OCE and OCC not found")
@@ -29,17 +29,18 @@ if(TRUE)
   SET(OCC_LINK_LIBS TKernel TKMath  TKTopAlgo TKG3d TKBRep 
                   TKMesh TKSTL TKXMesh TKBO TKBool TKSTEPBase TKSTEP TKXSBase )
 else()
-  SET(OCC_INCLUDE_DIRS "/mnt/windata/MyRepo/opencascade-7.5.0/build/include/opencascade")
-  link_directories("/mnt/windata/MyRepo/opencascade-7.5.0/build/lin64/gcc/libd")  # debug `libd`
+  SET(OCC_INCLUDE_DIRS "/usr/include/opencascade")
+  link_directories("/usr/lib/x86_64-linux-gnu/")  # debug `libd`
   SET(OCC_LINK_LIBS TKernel TKMath  TKTopAlgo TKG3d TKBRep 
                   TKMesh TKRWMesh TKSTL TKXMesh TKBO TKBool TKSTEPBase TKSTEP TKXSBase )
 endif()
 
 
 #find_package( OpenCV REQUIRED )
-# can not install libopencv-dev for confliction, here is the hack on ubuntu
+# can not install libopencv-dev for confliction, here is the hack on ubuntu 20.04
+# ubuntu 18.04 opencv version 3.2 with folder name /usr/include/opencv2
 # install libopencv-core-dev  libopencv-imgcodecs-dev
-set(OpenCV_INCLUDE_DIRS "/usr/include/opencv4")
+set(OpenCV_INCLUDE_DIRS "/usr/include/opencv4"  "/usr/include/opencv2")
 set(OpenCV_LIBS "opencv_core" "opencv_imgcodecs")
 
 include_directories( ${OpenCV_INCLUDE_DIRS} )
@@ -57,7 +58,11 @@ target_link_libraries(occProjector Eigen3::Eigen)
 target_link_libraries(occProjector ${OpenCV_LIBS})
 
 ########################################################
+if(EXISTS "occ_inscribe.cpp")
+
 ADD_EXECUTABLE(occ_inscribe occ_inscribe.cpp)
 target_compile_definitions(occ_inscribe PUBLIC "-DBUILD_INSCRIBE")
 TARGET_LINK_LIBRARIES(occ_inscribe  ${OCC_LINK_LIBS})
 target_link_libraries(occ_inscribe Eigen3::Eigen)
+
+endif()

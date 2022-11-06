@@ -106,7 +106,7 @@ void save_image(const Image& tim, const std::string& filename, const Intersectio
             const auto n = p->size();
             if(n>=2)
             {
-                im.at<cv::Vec3b>(r, c) = {(*p)[0] *255, tim(r,c) * 255, (*p)[n-1] *255}; // may overflow
+                im.at<cv::Vec3b>(r, c) = {(*p)[0] *255, tim(r,c) * 255, (*p)[n-1] *255}; // will not overflow
             }
         }
     }
