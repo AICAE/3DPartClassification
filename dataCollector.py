@@ -21,14 +21,14 @@ from input_parameters import dataset_name, output_root_path, dataset_metadata_fi
       generatingThicknessViewImage, processed_imagedata_filepath, processed_metadata_filepath
 from imagePreprocess import collectImages
 
-# here there is a bug output_root_path has not been updated
+# here there is a bug output_root_path has not been updated, due to import sequence, or multiple import
 if dataset_name == "FreeCAD_lib":
     from fclib_parameters import *
-    output_root_path = "/mnt/windata/DataDir/freecad_library_output_thickness/"
+    output_root_path = "/mnt/DataDir/freecad_library_output_thickness/"
 
 if dataset_name == "KiCAD_lib":
     from kicad_parameters import *
-    output_root_path = "/media/qingfeng/kicad-packages3D_output_thickness/"
+    output_root_path = "/media/DataDir/kicad-packages3D_output_thickness/"
 
 dataset = []
 imagelist = []
@@ -98,7 +98,7 @@ if dataset_name == "Thingi10K":
             print("Can not find all view image files for the input ", image_stem)
 
 
-else:  # FreeCADLib,  or  ModelNet
+else:  # FreeCADLib, KiCAD or  ModelNet, ShapeNet
     CATEGORY_LABEL="category"
     FILENAME_LABEL="filename"
     columns = ["filename", "category", "subcategories", "path"]
@@ -125,8 +125,21 @@ else:  # FreeCADLib,  or  ModelNet
                         entry["category"] = "EN10056 Angle Bars"
 
         if dataset_name == "KiCAD_lib":
+            #category = entry["category"].split('.')[0]
             # specific dataset, filitering and adapting
-            pass
+            
+            #if merging_SMD_THT and category.startswith('Inductor'):
+            #    entry["category"] = 'Inductor'
+            if category.startswith('Inductor_SMD'):
+                return
+            if merging_SMD_THT and category.startswith('Capacitor'):
+                entry["category"] = 'Capacitor'
+            if merging_SMD_THT and category.startswith('Button_Switch'):
+                entry["category"] = 'Button_Switch'
+
+        if dataset_name == "ShapeNetCore":
+            # will category equal to subfolder name?
+            entry["category"] = 'Capacitor'
 
         # from relative path to abspath
         filefolder = output_root_path + os.path.sep + entry["path"]

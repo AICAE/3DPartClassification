@@ -27,12 +27,19 @@ try:
 except Exception as e:
     print("Warning: failed to import partConverter", e)
 
+merging_SMD_THT = True  # merge sourface mount and through-hole into one category
+
 KiCAD_Categories = ["Connector_Molex", "Connector_Phoenix_MC", 'Connector_Dsub'
-'Button_Switch_SMD', 'Capacitor_SMD', 'Crystal', 
-'Inductor_SMD', 'Diode_THT',  'LED_THT', "Transformer_THT", 
+'Connector_PinHeader_1', 'Connector_PinSocket_1', 
+'Button_Switch_SMD',  'Button_Switch_THT', 'Capacitor_SMD', 'Capacitor_THT', 'Crystal', 
+'Inductor_SMD', 'Inductor_THT', 'Diode_THT',  'LED_THT', "Transformer_THT", 
 'Package_BGA', 'Package_SO', 'Package_DIP',
-'Relay_THT', 'Resistor_THT', 'TerminalBlock_Phoenix'
+'Relay_THT', 'Resistor_THT', 'TerminalBlock_Phoenix', 'Varistor'
 ]
+
+# 'Varistor'  looks different from resistor THT, 
+# Resistor_SMD and capacitor SMD may look similar
+# Inductor_SMD and Capacitor_SMD can not been distuished by shape
 
 ###########################
 # generate image by python + command line program written in C++

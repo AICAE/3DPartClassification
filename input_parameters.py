@@ -88,6 +88,22 @@ elif dataset_name.find("ModelNet") >= 0:
             dataset_dir_path = output_root_path
             dataset_metadata_filename = "ModelNet10_dataset.json"
 
+elif dataset_name.find("ShapeNetCore") >= 0:
+    isMeshFile = True    # choose between  part and mesh input format
+    # off mesh file is not manifold, cause error in thickness view generation
+    hasPerfileMetadata  = False  # where is the metadata like tag and c
+
+    ##############################
+    if testing:
+        input_root_path = "./testdata/ShapeNetCore_data"
+        output_root_path = input_root_path  + "_output"
+        dataset_metadata_filename = "testShapeNetCore_dataset.json"
+    else:
+        input_root_path = DATA_DIR + "ShapeNetCore"
+        output_root_path = DATA_DIR + "ShapeNetCore_output"
+        dataset_dir_path = output_root_path
+        dataset_metadata_filename = "ShapeNetCore_dataset.json"
+
 elif dataset_name == "KiCAD_lib":
     from kicad_parameters import *
 
@@ -105,7 +121,8 @@ if generatingThicknessViewImage:
 # preprocessing  meshlib meshed part dataset_metadata_filename
 ##########################
 if isMeshFile and isPreprocessing:
-    supported_input_file_suffices = set(["off", "stl"])  #  freecad/meshio support a few mesh format, off
+    supported_input_file_suffices = set(["off", "stl", "obj"])  #  freecad/meshio support a few mesh format, off
+    # obj mesh format should be covnerted into stl by meshio
     input_file_suffix = "stl"
     # stl is the only format needed for view generator
 

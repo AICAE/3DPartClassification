@@ -12,26 +12,28 @@ if not os.path.exists(DATA_DIR):
     if platform.system() == "Linux":
         INPUT_DATA_DIR = "/media/DataDir/"
         DATA_DIR="/media/DataDir/"
-    else:
+    else:  # windows OS
         INPUT_DATA_DIR = "F:/AICAE_DataDir/"
         DATA_DIR = "F:/AICAE_DataDir/"
 
 # preprocessed images should be 60X60, left 4 pixels for random shifting (data augment)
 # training input data could be 64X64Xchannels after padding
 isPreprocessing = False          # False: for training only, skip preprocessing on Windows
+testing = False   #  True only for data preprocessing debugging purpose, using test data
 
 #dataset_name = "FreeCAD_lib"    # Mechanical CAD part library
-dataset_name = "KiCAD_lib"      # ECAD KiCAD library
+#dataset_name = "KiCAD_lib"      # ECAD KiCAD library
 #dataset_name = "Thingi10K"      # all data in one folder, do not use, categorization not ideal
 #dataset_name =  "ModelNet10"    #  has two variants, ModelNet10 and ModelNet40
 #dataset_name =  "ModelNet40"
+dataset_name =  "ShapeNetCore"
+
 isModelNet40 = dataset_name == "ModelNet40"
 isModelNet40Aligned = True
 
 minimum_sample_count = 20   # will collect 10 groups in freecad_lib if set as 20,  16 groups for 10
 
 usingKerasTuner = False         # tested, not quite useful
-testing = False   #  True only for data preprocessing debugging purpose, using test data
 usingMixedInputModel = True     # False: if use only image input, CNN, no multiple linear parameter submodel
 usingMaxViewPooling = False     # False: use image concat
 
@@ -48,7 +50,7 @@ paddingImage = False  # let tensorflow do random padding for data augmentation i
 
 # control total view count, baseline 3 views
 view_count = 3
-usingRotatingZAxisView = False # rotate currently rotate Z axis by 45degree, using 6 views
+usingRotatingZAxisView = False # rotate currently rotate Z axis by 45degree, to generate 6 views
 usingTriView = False  # not impl yet
 if usingRotatingZAxisView:
     view_count = 6

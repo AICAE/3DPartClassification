@@ -19,8 +19,10 @@ see another md doc
 
 ## Prerequisits
 
+This method does not requrie GPU to complete the training, laptop CPU is fine
+
 ### Tested platforms
-The whole workflow has currently tested on Ubuntu 18.04/20.04 only, while it should work on windows, just taking time to sort out C++ building dependencies. OpenCV and OpenCASCADE C++ dev env should be installed, which is troublesoome on Windows.  
+The whole workflow has currently tested on Ubuntu 18.04/20.04 only, while it should work on windows, just taking time to sort out C++ building dependencies. OpenCV FreeCAD, and OpenCASCADE C++ dev env should be installed, which is troublesoome on Windows.  
 
 Windows users can download the preprocessed data in numpy file format. 
 
@@ -44,19 +46,19 @@ https://github.com/chrischoy/3D-R2N2 3D dense voxel ,
 
 The whole workflow has currently tested on Ubuntu only, while it should work on windows.  Windows user can download the numpy.array images + pandas metadata file, without preprocessing raw data (step 1 to 3 below), 
 
-1. Configuration: `global_config.py` select data source and saved dataset file names
-   `input_parameters.py` data source specific setup
+1. Configuration: `global_config.py` select data source and saved dataset file names,  also set `isPreprocessing`
+   `input_parameters.py` contains data source specific setup parameters
     
 2. Preprocessing: `dataGenerator.py`  
    generate classification data from folder structure into a single json file. 
    This script use scripts below:
-   + `partConverter.py`: use FreeCAD python API to convert step into brep, to feed ViewGenerators app `OccQt/OccProjector`: native executables that generate geometry metadata and dump views into images. 
-   + `meshPreprocessor.py`
-   + `imagePreprocessor.py`
+   + `partConverter.py`: use FreeCAD python API to convert step into brep, to feed ViewGenerators app `OccQt`: native executables that generate geometry metadata and dump views into images. 
+   + `meshPreprocessor.py`:  using FreeCAD python API to convert mesh file format into stl, to feed thickness view generator app `OccProjector`
+   + `imagePreprocessor.py`: image crop, channel fusion for thickness and depth view
 
 3. Prepare Dataset (collecting)
    `sudo apt install python3-tqdm python3-pandas python3-opencv`
-   + `dataCollector.py`  
+   + `dataCollector.py`  generate numpy file containing the images with corresponding single json file metadata
    + `dataSummary.py`  stat data and overview classification
    resize and merge images (opencv2) into numpy.array + json meta files into pandas DF
 
@@ -72,6 +74,10 @@ The whole workflow has currently tested on Ubuntu only, while it should work on 
 5. Postprocessing: `plotModel.py`
 
 
+### split for traing data and testing data: 
++ for FreeCAD and KiCAD lib dataset, using `stratify.py` to extract 1 sample from 5 samples as test data. 
++ for other dataset, train and test data are in different subfolder
+
 ## Dataset
 
 ### Tensorflow has ShapeNet ModelNet40
@@ -80,6 +86,8 @@ https://www.tensorflow.org/graphics/api_docs/python/tfg/datasets/shapenet/Shapen
 
 Aligined ModelNet40 dataset
 https://github.com/lmb-freiburg/orion
+
+### ShapeNetCore
 
 ### FreeCAD library dataset
 filter out category that has too smaller item. Actually, it has been done auto by tensorflow
