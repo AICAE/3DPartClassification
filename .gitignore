@@ -3,6 +3,7 @@ test*/*
 notes/*
 occProjector/*
 paper*/
+compressImage/*
 
 stage/*
 */*.png
@@ -10,6 +11,8 @@ stage/*
 *.log
 
 .vscode/*
+patent/*
+__pycache__/*
 
 *_example/*
 results/*

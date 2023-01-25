@@ -54,14 +54,15 @@ def my_split(df, images, class_col_name, train_folder_name = None, ratio=0.8, sh
             # conversion from dtype of object of list
             train_g = []
             test_g = []
+            # using 
             for i, v in group_data["subcategories"].iteritems():
-                if v == [train_folder_name]:
+                if train_folder_name in v:
                     train_g.append(i)
                 else:
                     test_g.append(i)
             train = pd.concat([train, df.iloc[train_g, :]])
             test = pd.concat([test, df.iloc[test_g, :]])
-        else: # using ratio is split
+        else: # using ratio to split
             train_size = int(group_size * ratio)
             if train_size >= 1 and group_size > min_sample_count:
                 train_i, test_i = index_split(group_size, ratio)

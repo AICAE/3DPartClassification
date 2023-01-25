@@ -23,7 +23,7 @@ import tempfile
 
 from global_config import dataset_name,  channel_count, thickness_channel, depthmap_channel,  \
     usingOnlyThicknessChannel, usingOnlyDepthmapChannel, usingMixedInputModel, usingKerasTuner, usingMaxViewPooling
-from input_parameters import view_count, model_input_shape, processed_metadata_filepath, processed_imagedata_filepath, saved_model_filepath
+from input_parameters import view_count, model_input_shape, processed_metadata_filepath, processed_imagedata_filepath, saved_model_filepath, isAlreadySplit
 
 print("[INFO] loading classification data in metadata file: ", processed_metadata_filepath)
 df = pd.read_json(processed_metadata_filepath)
@@ -67,6 +67,7 @@ from sklearn.model_selection import train_test_split
 
 
 from DTVmodel import DTVModel
+# there could be another way to split, based on subfolder
 from stratify import my_split
 
 # construct the argument parser and parse the arguments
@@ -203,15 +204,9 @@ else:
 if _debug:
     print(list(df.columns))
 
-# partition the data into training and testing splits using 75% of
-# the data for training and the remaining 25% for testing
 print("[INFO] split data...")
 
-
-#split = train_test_split(df, images, test_size=0.25, random_state=42)
-#(trainDataset, testDataset, trainImagesX, testImagesX) = split
-
-if dataset_name.find("ModelNet") >= 0:
+if dataset_name.find("ModelNet") >= 0 or dataset_name.find("ShapeNet") >= 0:
     train_folder_name="train"
 else:
     train_folder_name=None
@@ -337,12 +332,12 @@ else:
     if usingMixedInputModel:
         history = model.fit(
             [trainAttrX, trainImagesX], trainY,
-            validation_data=([testAttrX, testImagesX], testY),  # test does not have all classes
+            validation_data=([testAttrX, testImagesX], testY),
             epochs=EPOCH_COUNT, batch_size=BATCH_SIZE)
     else:
         history = model.fit(
             trainImagesX, trainY,
-            validation_data=(testImagesX, testY),  # test does not have all classes
+            validation_data=(testImagesX, testY),
             epochs=EPOCH_COUNT, batch_size=BATCH_SIZE)
 
     #####################################

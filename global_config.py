@@ -28,6 +28,7 @@ testing = False   #  True only for data preprocessing debugging purpose, using t
 #dataset_name =  "ModelNet40"
 dataset_name =  "ShapeNetCore"
 
+isAlreadySplit = False  # split data by folder name 'test', 'train', 'validate'
 isModelNet40 = dataset_name == "ModelNet40"
 isModelNet40Aligned = True
 

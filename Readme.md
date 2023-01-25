@@ -74,11 +74,26 @@ The whole workflow has currently tested on Ubuntu only, while it should work on 
 5. Postprocessing: `plotModel.py`
 
 
-### split for traing data and testing data: 
-+ for FreeCAD and KiCAD lib dataset, using `stratify.py` to extract 1 sample from 5 samples as test data. 
-+ for other dataset, train and test data are in different subfolder
 
 ## Dataset
+
+### split for training data and testing data: 
++ for FreeCAD and KiCAD lib dataset, using `stratify.py` to extract 1 sample from 5 samples as test data. 
++ for other dataset, train and test data are in different subfolder
+```py
+# in my_split()
+for i, v in group_data["subcategories"].iteritems():
+      if train_folder_name in v:
+         train_g.append(i)
+      else:
+         test_g.append(i)
+
+# in partClassify.py
+if dataset_name.find("ModelNet") >= 0 or dataset_name.find("ShapeNet") >= 0:
+    train_folder_name="train"
+else:
+    train_folder_name=None  # by a 80% ans 20% split
+```
 
 ### Tensorflow has ShapeNet ModelNet40
 
