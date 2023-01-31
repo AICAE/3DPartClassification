@@ -4,6 +4,8 @@ DTV-CNN: deep learning on fusion of depth and thickness views for 3D shape class
 
 Qingfeng Xia
 https://www.researchgate.net/profile/Qingfeng_Xia
+
+MIT licensed
 ---
 
 ## Innovation

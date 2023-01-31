@@ -2,7 +2,7 @@
 
 Shapenet use ModelNet10 dataset, creator of dataset ModelNet
 
-Leaderboard for modelnet 
+Leaderboard for modelnet
 
 刚好最近看到一篇文章3D ShapeNets: A Deep Representation for Volumetric Shapes说的是将带深度信息的图像转化为3D体素。
 
@@ -24,7 +24,7 @@ https://github.com/WeiTang114/MVCNN-TensorFlow  no preprocessor to gen views
 
 
 
-#### Multiview pooling: 
+#### Multiview pooling:
 
 ```py
 #https://github.com/WeiTang114/MVCNN-TensorFlow/blob/master/model.py
@@ -35,7 +35,7 @@ def _view_pool(view_features, name):
         vp = tf.concat([vp, v], 0)
     print 'vp before reducing:', vp.get_shape().as_list()
     vp = tf.reduce_max(vp, [0], name=name)
-    return vp 
+    return vp
 ```
 
 
@@ -97,7 +97,7 @@ https://github.com/YoYo000/MVSNet
 
 
 
-### Multi-view Discrimination and Pairwise CNN (MDPCNN)  for View-based 3D Object Retrieval  
+### Multi-view Discrimination and Pairwise CNN (MDPCNN)  for View-based 3D Object Retrieval
 
 Use only 3 views!
 
@@ -110,16 +110,15 @@ B. Pairwise Sample Generation
 C. Multi-Batch
 
 
+###  4 Datasets that are too small for each category
 
-4 Dataset: 
+• ETH 3D object dataset ([38]), in this dataset, there are 80 objects that belong to 8 categories, and 41 different view images are used to represent each object from ETH dataset. In total, it contains 3280 views belonging to 8 categories.
 
-• ETH 3D object dataset ([38]), in this dataset, there are 80 objects that belong to 8 categories, and 41 different view images are used to represent each object from ETH dataset. In total, it contains 3280 views belonging to 8 categories. 
-
-• NTU60 3D model dataset ([6]), in this dataset, there are 549 objects that belong to 47 categories, and 60 different view samples are utilized to describe each object from NTU60 dataset. In total, it contains 32940 views belonging to 47 categories. 
+• NTU60 3D model dataset ([6]), in this dataset, there are 549 objects that belong to 47 categories, and 60 different view samples are utilized to describe each object from NTU60 dataset. In total, it contains 32940 views belonging to 47 categories.
 
 • MVRED 3D category dataset ([39]), in this dataset, there are 505 objects that belongs to 61 categories, and 36 different view images are included in each object from MVRED dataset. In total, it contains 18180 views belonging to 61 categories
 
-### 
+### Harmonized Bilinear
 
 Multi-view Harmonized Bilinear Network for 3D Object Recognition
 
@@ -141,11 +140,11 @@ https://github.com/garyli1019/pointnet-keras
 
 ## Voxnet
 
-https://github.com/dimatura/voxnet    
+https://github.com/dimatura/voxnet
 
 32X32X32 binary voxel 3D matrix
 
-https://github.com/tobiagru/Deep-3D-Obj-Recognition              keras 
+https://github.com/tobiagru/Deep-3D-Obj-Recognition              keras
 
 ### FusionNet: 3D Object Classification Using Multiple Data Representations
 

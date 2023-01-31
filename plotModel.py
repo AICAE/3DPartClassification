@@ -11,6 +11,7 @@ result_dir = 'results'
 # class-wise accuracy table, -> confusion matrix
 
 #saved_model_filepath = r"D:\DataDir\ModelNet10_output_thickness\6views_DT_cubebox_mixedinput_ModelNet10_feb12.h5"
+#saved_model_filepath = r"D:\DataDir\freecad_library_output_thickness\DT_cubebox_mixedinput_FreeCAD_lib_group16_Acc0.95.h5"
 
 saved_model_name = os.path.basename(saved_model_filepath)
 if not os.path.exists(result_dir):
