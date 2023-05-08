@@ -5,7 +5,7 @@ DTV-CNN: deep learning on fusion of depth and thickness views for 3D shape class
 Qingfeng Xia
 https://www.researchgate.net/profile/Qingfeng_Xia
 
-MIT licensed
+MIT licensed  2019-2023
 ---
 
 ## Innovation
@@ -104,7 +104,6 @@ https://www.tensorflow.org/graphics/api_docs/python/tfg/datasets/shapenet/Shapen
 Aligined ModelNet40 dataset
 https://github.com/lmb-freiburg/orion
 
-### ShapeNetCore
 
 ### FreeCAD library dataset
 filter out category that has too smaller item. Actually, it has been done auto by tensorflow
@@ -130,42 +129,11 @@ https://kicad.github.io/packages3d/
 STEP and WRL
 WRL files are an extension of the Virtual Reality Modeling Language (VRML) format .
 
-why? classification and match to setup simulation
+
+### ShapeNetCore v2
+dataset is under evaluation, DTVModel has been modified to improve accuracy.
+Code related ShapeNetCore v2 is not published yet, will try 
 
 
-## Comparison study
-
-see also <docs/Todo.md>
-### compressed image, vs not compressed
-
-bit compression, 
-
-6 views for modelnet10,  maxcube, 
-non-watertight may cause some problem
-11/11 [==============================] - 31s 3s/step - loss: 0.1789 - accuracy: 0.9412 - val_loss: 0.2128 - val_accuracy: 0.9392
-
-
-3 views as a group?
-per class error matrix plot
-
-converted part: /media/qxia/QingfengXia/AICAE_DataDir/ModelNet40_output_thickness/airplane/test/airplane_0683.stl
-face_normals contain NaN, ignoring!
-face_normals contain NaN, ignoring!
-
-converted part: /media/qxia/QingfengXia/AICAE_DataDir/ModelNet40_output_thickness/airplane/test/airplane_0687.stl
-face_normals contain NaN, ignoring!
-
-volume data is not correct!
-cone                         0.005735            0.700597            0.743134          1.010104e-02        1.010107e-02          1.010102e-02
-
-### different image resolution, 
-
-quick enough by threading
-
-image pixel is not fixed, why?
-
-scale to aspect ratio 1:1
-
-### using geometry meta data only or images only
 
 

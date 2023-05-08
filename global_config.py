@@ -57,7 +57,7 @@ if usingRotatingZAxisView:
     view_count = 6
 
 # control channel count, baseline is thickness + depthmap 2 channels
-usingOnlyThicknessChannel = True  # if False, use thickness and depth
+usingOnlyThicknessChannel = False  # if False, use thickness and depth
 usingOnlyDepthmapChannel = False  # if False, use thickness and depth
 channel_count = 2 if generatingThicknessViewImage else 1
 channel_count = 1 if usingOnlyThicknessChannel or usingOnlyDepthmapChannel else channel_count
