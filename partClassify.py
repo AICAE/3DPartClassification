@@ -6,6 +6,7 @@ the main app for part classification
 
 _debug = True
 _using_saved_model = True #
+_calculating_gflops = False 
 
 BATCH_SIZE = 200  # if dataset is small, make this bigger
 EPOCH_COUNT = 50
@@ -95,6 +96,7 @@ if images.shape[-1] > 3  and len(model_input_shape) > len(images.shape)-1  and m
     new_shape = [images.shape[0]] + list(model_input_shape)
     images = np.reshape(images, new_shape)
 print("[INFO] loaded images ndarray shape from file", images.shape)
+
 
 if dataset_name == "Thingi10K":
     CATEGORY_LABEL="Category"  # "Category" is too coarse to classify
@@ -186,7 +188,7 @@ def demo(feature_column):
 LABEL = "category_classified"
 using_feature_column = False
 if using_feature_column:
-    # todo: feature_column is not defined
+    # todo: feature_column is not defined in some version of tensorflow
     classes = feature_column.categorical_column_with_vocabulary_list(
           CATEGORY_LABEL, df[CATEGORY_LABEL].unique())
 
@@ -239,12 +241,11 @@ if _debug:
 #trainY = to_categorical(trainY)  #return None
 #testY = to_categorical(testY)
 
-# no category columns,
+#
 trainAttrX = pd.DataFrame(trainDataset, columns = FEATURES)
 testAttrX = pd.DataFrame(testDataset, columns = FEATURES)
 
 ##########################################
-## auto checkpoint save?
 
 # EarlyStopping for prevent overfitting
 early_stop_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=10, verbose=2)
@@ -265,12 +266,45 @@ def keyboardInterruptHandler(signal, frame):
     exit(0)
 signal.signal(signal.SIGINT, keyboardInterruptHandler)
 
+
 ##########################################
 print("[INFO] model input image shape, and images shape", model_input_shape, imageShape)
 model_settings = { "total_classes": total_classes, "usingMixedInputs": usingMixedInputModel,
                     "usingMaxViewPooling": usingMaxViewPooling,
                     "image_width": model_input_shape[-3], "regress": False}
 
+##########################################
+
+if _calculating_gflops:
+    # this is not decent way (hardcoded the input data size) to calc GFLOPS, 
+    image_input_tensor = tf.constant(np.random.randn(1, 3, 60, 60, 2))  # single sample gflops
+    cnn_model = DTVModel(model_settings).create_cnn(model_input_shape)
+    #from get_flops import get_flops
+    #print("[INFO] GPLOPS for this DTVCNN model is: ", get_flops(cnn_model, [image_input_tensor]))  # not working
+
+    tf.compat.v1.disable_eager_execution()
+    session = tf.compat.v1.Session()
+    graph = tf.compat.v1.get_default_graph()
+
+    with graph.as_default():
+        with session.as_default():
+            model = DTVModel(model_settings).create_cnn(model_input_shape)
+
+            run_meta = tf.compat.v1.RunMetadata()
+            opts = tf.compat.v1.profiler.ProfileOptionBuilder.float_operation()
+
+            # Optional: save printed results to file
+            # flops_log_path = os.path.join(tempfile.gettempdir(), 'tf_flops_log.txt')
+            # opts['output'] = 'file:outfile={}'.format(flops_log_path)
+
+            # We use the Keras session graph in the call to the profiler.
+            flops = tf.compat.v1.profiler.profile(graph=graph,
+                                                  run_meta=run_meta, cmd='op', options=opts)
+
+    tf.compat.v1.reset_default_graph()
+    print("[INFO] GPLOPS for this DTVCNN model is: ", flops.total_float_ops / 1e9)
+
+#####################################
 # LearningRate = LearningRate * 1/(1 + decay * epoch)
 #opt = Adam(learning_rate=INIT_LEARN_RATE, beta_1=0.7, decay=50/EPOCH_COUNT)
 opt = Adam(lr=INIT_LEARN_RATE, beta_1=0.7, decay=1e-5 )  #  1e-5 / 200
