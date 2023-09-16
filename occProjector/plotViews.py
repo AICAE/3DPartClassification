@@ -94,13 +94,15 @@ def plot_projection_views(outputfile_stem, usingTriView = False):
                 else:
                     ax = axs[i, ch]
                     if ch == 2 and mergingDTchannels:
-                        ax.imshow(im[:, :, :])
+                        img = ax.imshow(im[:, :, :])
                     else:
-                        ax.imshow(im[:, :, ch])
+                        img = ax.imshow(im[:, :, ch],  cmap='RdBu_r', vmin=0.0, vmax=1.0,interpolation='none')
+                        fig.colorbar(img, ax=ax)
                     # todo: set colormap vmin and vmax to to same
                 ax.set_axis_off()
                 ax.set_title(view_full_names[i]+ " " + channel_names[ch])
                 #ax.legend()
+
 
     plt.show()
 
