@@ -6,6 +6,7 @@ Qingfeng Xia
 https://www.researchgate.net/profile/Qingfeng_Xia
 
 MIT licensed  2019-2023
+
 ---
 
 ## Innovation
@@ -19,19 +20,6 @@ MIT licensed  2019-2023
 
 see another md doc, or just see the paper, link to be added later.
 
-## Hardware requirement: CPU is fine
-
-This method does not requrie GPU to complete the training, laptop CPU is sufficient to run the test.
-
-### Tested OS platforms
-The whole workflow has currently tested on Ubuntu 18.04/20.04 only, while it should work on windows, just taking time to sort out C++ building dependencies. OpenCV FreeCAD, and OpenCASCADE C++ dev env should be installed, which is troublesoome on Windows.  
-
-Windows users can download the preprocessed data in numpy file format. 
-
-`pip install pydot graphviz python3-opencv scikit-learn tensorflow`
-
-Install graphviz executable (make sure dot executable is on path) from official website, and then `pip install pydot graphviz` to plot tensorflow model.
-
 ### Other models compared
 AICAE/VoxNet-Tensorflow-V2: migrate VoxNet-Tensorflow to Tensorflow V2 API (AICAE/VoxNet-Tensorflow-V2)
 MVCNN:  migrated to Tensorflow V2 API by other developer 
@@ -40,14 +28,44 @@ MVCNN:  migrated to Tensorflow V2 API by other developer
 "Meshnet: Mesh neural network for 3d shape representation"
 https://github.com/chrischoy/3D-R2N2 3D dense voxel ,  
 
+# Reproduction of this work
+
+### Hardware requirement: CPU is fine
+
+This method does not requrie GPU to complete the training, laptop CPU is sufficient to run the test.
+
+### Tested OS platforms
+The whole workflow has currently tested on Ubuntu 18.04/20.04 only, while it should work on windows, just taking time to sort out C++ building dependencies. OpenCV FreeCAD, and OpenCASCADE C++ dev env should be installed, which is troublesoome on Windows.  
+
+Windows users can use the preprocessed data in numpy file format, which have been uploaded as zip file inside this repo 
+
+`pip install pydot graphviz python3-opencv scikit-learn tensorflow`
+
+Install graphviz executable (make sure dot executable is on path) from official website, and then `pip install pydot graphviz` to plot tensorflow model.
+
+### Software dependencies
+FreeCAD is needed and show be installed 
+
+`pip install -r requirements.txt`
+
+
 ## Data preprocessing and training workflow
 
 The whole workflow has currently tested on Ubuntu only, while it should work on windows.  Windows user can download the numpy.array images + pandas metadata file, without preprocessing raw data (step 1 to 3 below), 
 
 1. Configuration: `global_config.py` select data source and saved dataset file names,  also set `isPreprocessing`
    `input_parameters.py` contains data source specific setup parameters
+
     
-2. Preprocessing: `dataGenerator.py`  
+2. Preprocessing: `dataGenerator.py` generate DTV images
+
+   first of all, build the image ViewGenerators: occProjector
+gi
+   Note: ViewGenerators OccProjector is based on OpenCACADE C++ API, no doc is provided for build on Windows. 
+   On Linux, if you have FreeCAD installed and with the FreeCAD development env setup, you should be enable to compile it.
+
+   `OccQt` and `OccProjector` are subprojects. 
+
    generate classification data from folder structure into a single json file. 
    This script use scripts below:
    + `partConverter.py`: use FreeCAD python API to convert step into brep, to feed ViewGenerators app `OccQt`: native executables that generate geometry metadata and dump views into images. 
@@ -58,13 +76,7 @@ The whole workflow has currently tested on Ubuntu only, while it should work on 
    `sudo apt install python3-tqdm python3-pandas python3-opencv`
    + `dataCollector.py`  generate numpy file containing the images with corresponding single json file metadata
    + `dataSummary.py`  stat data and overview classification
-   resize and merge images (opencv2) into numpy.array + json meta files into pandas DF
-
-===
-   Note: ViewGenerators (OccQt/OccProjector) is based on OpenCACADE C++ API, no doc is provided for build on Windows. If you have FreeCAD installed and with the FreeCAD development env setup, you should be enable to compile it.
-
-   `OccQt` and `OccProjector` are subprojects. 
-===   
+   resize and merge images (opencv2) into numpy.array + json meta files into pandas DF 
 
 4. Traing: `partClassify.py`: TensorFlow model mixed data (images, category data)
   `DTVmodel.py`, `stratify.py`
@@ -75,24 +87,6 @@ The whole workflow has currently tested on Ubuntu only, while it should work on 
 
 It is written in C++ using OpenCASCADE, see the Readme.md in this subproject.
 
-### split for training data and testing data: 
-+ for FreeCAD and KiCAD lib dataset, using `stratify.py` to extract 1 sample from 5 samples as test data. 
-+ for other dataset, train and test data are in different subfolder
-```py
-# in my_split()
-for i, v in group_data["subcategories"].iteritems():
-      if train_folder_name in v:
-         train_g.append(i)
-      else:
-         test_g.append(i)
-
-# in partClassify.py
-if dataset_name.find("ModelNet") >= 0 or dataset_name.find("ShapeNet") >= 0:
-    train_folder_name="train"
-else:
-    train_folder_name=None  # by a 80% ans 20% split
-```
-
 
 ## Datasets
 
@@ -100,37 +94,44 @@ This paper has listed all the 3D CAD datasets found, here the preprocessing meth
 
 ### Preproessed dataset are in `data` subfolder
 
-unzip the zip to release numpy file (containing image collection as multi-dimension array), and move npy file wit json file to somewhere
+A pair of npy file and _metadata.json files are needed to train the model.
 
+unzip the zip to release numpy file (containing image collection as multi-dimension array); zipping can reduce the file size by 100 times, a bit surprising.
 
-```
+git lfs should be installed  in order to push and pull large binary files
+`git config lfs.https://github.com/AICAE/3DPartClassification.git/info/lfs.locksverify false`
+
+```sh
+# tested working , if set `usingCubeBoundBox = False` in global_config.py
+# after unzip, make sure npy file is at the same folder as json file
 processed_3view_KiCAD_lib_imagedata.zip             
-processed_3view_KiCAD_lib_metadata.json    
-# six views 
+processed_3view_KiCAD_lib_metadata.json
+
+# FreeCAD dataset
+# six views , could be removed to  `processed_3view_FreeCAD_lib_imagedata`
+# and set `usingCubeBoundBox = False` in global_config.py
 processed_nview_FreeCAD_lib_imagedata.zip
 processed_nview_FreeCAD_lib_metadata.json
+processed_3view_FreeCAD_lib_metadata.zip
+processed_3view_FreeCAD_lib_metadata.json
+# and set `usingCubeBoundBox = True` in global_config.py
+processed_cubebox_3view_FreeCAD_lib_metadata.zip
+processed_cubebox_3view_FreeCAD_lib_metadata.json
 
+
+# tested, set `usingCubeBoundBox = True`  in global_config.p
+processed_cubebox_3view_ModelNet10_imagedata.zip
+processed_cubebox_3view_ModelNet10_metadata.json 
 # tensorflow model checkout data
 6views_DT_cubebox_mixedinput_ModelNet10_feb12.h5
 6views_DT_cubebox_mixedinput_ModelNet10_feb12.h5.json 
 
 processed_cubebox_3view_ModelNet40_metadata.json
 processed_cubebox_3view_ModelNet40_imagedata.zip
-
-processed_cubebox_3view_ModelNet10_imagedata.zip
-processed_cubebox_3view_ModelNet10_metadata.json 
 ```
 
-and then edit the INPUT_DATA_DIR and DATA_DIR in  `global_config.py`
-```py
-if not os.path.exists(DATA_DIR):
-    if platform.system() == "Linux":
-        INPUT_DATA_DIR = "/media/DataDir/"
-        DATA_DIR ="/media/DataDir/"  #output dir
-    else:  # windows OS
-        INPUT_DATA_DIR = "E:/AICAE_DataDir/"
-        DATA_DIR = "E:/AICAE_DataDir/"
-```
+and then check the INPUT_DATA_DIR and DATA_DIR in  `global_config.py`
+
 finally, run the training `partClassify.py`
 `kicad_dataset` subfolder, also contains the traing history
 
@@ -174,4 +175,20 @@ I have tried to download CAD models from <tracparts.com>, but it is not time-ass
 The half-baken scripts are listed in <tracparts_download>
 
 
+### split for training data and testing data
++ for FreeCAD and KiCAD lib dataset, using `stratify.py` to extract 1 sample from 5 samples as test data. 
++ for other dataset, train and test data are in different subfolder
+```py
+# in my_split()
+for i, v in group_data["subcategories"].iteritems():
+      if train_folder_name in v:
+         train_g.append(i)
+      else:
+         test_g.append(i)
 
+# in partClassify.py
+if dataset_name.find("ModelNet") >= 0 or dataset_name.find("ShapeNet") >= 0:
+    train_folder_name="train"
+else:
+    train_folder_name=None  # by a 80% ans 20% split
+```

@@ -1,0 +1,6 @@
+opencv-python
+scipy
+numpy
+matplotlib
+pandas
+tensorflow>=2.5.0

@@ -9,9 +9,9 @@ isPreprocessing = False          # False: for training only, skip preprocessing 
 testing = False   #  True only for data preprocessing debugging purpose, test data not uploaded to repo
 
 dataset_name = "FreeCAD_lib"    # Mechanical CAD part library
-#dataset_name = "KiCAD_lib"      # ECAD KiCAD library
+#dataset_name = "KiCAD_lib"      # ECAD KiCAD packaging library
 #dataset_name = "Thingi10K"      # all data in one folder, do not use, categorization not ideal
-dataset_name =  "ModelNet10"    #  has two variants, ModelNet10 and ModelNet40
+#dataset_name =  "ModelNet10"    #  has two variants, ModelNet10 and ModelNet40
 #dataset_name =  "ModelNet40"
 #dataset_name =  "ShapeNetCore"  # this work is done in workplace PC, source code not available
 

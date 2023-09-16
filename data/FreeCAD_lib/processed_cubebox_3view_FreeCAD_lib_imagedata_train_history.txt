@@ -1,0 +1,39 @@
+# tested 2023-09-16, the learn rate may be too big, that validation diverged
+Epoch 1/50
+8/8 [==============================] - 80s 5s/step - loss: 2.3683 - accuracy: 0.3204 - val_loss: 2.1819 - val_accuracy: 0.2438
+Epoch 2/50
+8/8 [==============================] - 40s 5s/step - loss: 1.3155 - accuracy: 0.5757 - val_loss: 2.1249 - val_accuracy: 0.3288
+Epoch 3/50
+8/8 [==============================] - 35s 4s/step - loss: 1.0156 - accuracy: 0.6891 - val_loss: 2.0205 - val_accuracy: 0.2849
+Epoch 4/50
+8/8 [==============================] - 33s 4s/step - loss: 0.7351 - accuracy: 0.7604 - val_loss: 1.9680 - val_accuracy: 0.3068
+Epoch 5/50
+8/8 [==============================] - 35s 4s/step - loss: 0.6147 - accuracy: 0.7963 - val_loss: 1.9156 - val_accuracy: 0.3068
+Epoch 6/50
+8/8 [==============================] - 39s 5s/step - loss: 0.5317 - accuracy: 0.8323 - val_loss: 1.9706 - val_accuracy: 0.3068
+Epoch 7/50
+8/8 [==============================] - 38s 5s/step - loss: 0.4261 - accuracy: 0.8663 - val_loss: 2.1437 - val_accuracy: 0.2575
+Epoch 8/50
+8/8 [==============================] - 38s 5s/step - loss: 0.4201 - accuracy: 0.8649 - val_loss: 2.3364 - val_accuracy: 0.2329
+Epoch 9/50
+8/8 [==============================] - 34s 4s/step - loss: 0.3631 - accuracy: 0.8921 - val_loss: 2.6199 - val_accuracy: 0.2000
+Epoch 10/50
+8/8 [==============================] - 35s 4s/step - loss: 0.3107 - accuracy: 0.8955 - val_loss: 2.9937 - val_accuracy: 0.1616
+Epoch 11/50
+8/8 [==============================] - 43s 5s/step - loss: 0.2967 - accuracy: 0.9077 - val_loss: 3.3627 - val_accuracy: 0.1342
+Epoch 12/50
+8/8 [==============================] - 37s 5s/step - loss: 0.2600 - accuracy: 0.9145 - val_loss: 4.0705 - val_accuracy: 0.1123
+Epoch 13/50
+8/8 [==============================] - 37s 5s/step - loss: 0.2541 - accuracy: 0.9192 - val_loss: 4.7991 - val_accuracy: 0.1205
+Epoch 14/50
+8/8 [==============================] - 38s 5s/step - loss: 0.2218 - accuracy: 0.9314 - val_loss: 6.3730 - val_accuracy: 0.0904
+Epoch 15/50
+8/8 [==============================] - 37s 5s/step - loss: 0.2325 - accuracy: 0.9287 - val_loss: 6.9096 - val_accuracy: 0.0849
+Epoch 16/50
+8/8 [==============================] - 37s 5s/step - loss: 0.1809 - accuracy: 0.9375 - val_loss: 7.9353 - val_accuracy: 0.0849
+Epoch 17/50
+8/8 [==============================] - 37s 5s/step - loss: 0.1823 - accuracy: 0.9416 - val_loss: 9.1012 - val_accuracy: 0.0849
+Epoch 18/50
+8/8 [==============================] - 40s 5s/step - loss: 0.1497 - accuracy: 0.9552 - val_loss: 9.7876 - val_accuracy: 0.0849
+Epoch 19/50
+8/8 [==============================] - 37s 5s/step - loss: 0.1458 - accuracy: 0.9518 - val_loss: 11.1484 - val_accuracy: 0.0849
