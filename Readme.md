@@ -17,13 +17,13 @@ MIT licensed  2019-2023
 
 ## Literature view of existing models
 
-see another md doc
+see another md doc, or just see the paper, link to be added later.
 
-## Prerequisits
+## Hardware requirement: CPU is fine
 
-This method does not requrie GPU to complete the training, laptop CPU is fine
+This method does not requrie GPU to complete the training, laptop CPU is sufficient to run the test.
 
-### Tested platforms
+### Tested OS platforms
 The whole workflow has currently tested on Ubuntu 18.04/20.04 only, while it should work on windows, just taking time to sort out C++ building dependencies. OpenCV FreeCAD, and OpenCASCADE C++ dev env should be installed, which is troublesoome on Windows.  
 
 Windows users can download the preprocessed data in numpy file format. 
@@ -32,17 +32,13 @@ Windows users can download the preprocessed data in numpy file format.
 
 Install graphviz executable (make sure dot executable is on path) from official website, and then `pip install pydot graphviz` to plot tensorflow model.
 
-
-
-### Other models
-AICAE/VoxNet-Tensorflow-V2: migrate VoxNet-Tensorflow to Tensorflow V2 API (github.com)
+### Other models compared
+AICAE/VoxNet-Tensorflow-V2: migrate VoxNet-Tensorflow to Tensorflow V2 API (AICAE/VoxNet-Tensorflow-V2)
+MVCNN:  migrated to Tensorflow V2 API by other developer 
 
 "3D shape classification and retrieval based on polar view"
 "Meshnet: Mesh neural network for 3d shape representation"
-
-https://github.com/chrischoy/3D-R2N2 3D dense voxel , 
-
-(7859, 3, 60, 60, 2) modelnet40
+https://github.com/chrischoy/3D-R2N2 3D dense voxel ,  
 
 ## Data preprocessing and training workflow
 
@@ -67,7 +63,7 @@ The whole workflow has currently tested on Ubuntu only, while it should work on 
 ===
    Note: ViewGenerators (OccQt/OccProjector) is based on OpenCACADE C++ API, no doc is provided for build on Windows. If you have FreeCAD installed and with the FreeCAD development env setup, you should be enable to compile it.
 
-   OccQt and OccProjector are subproject, with cmake to assist compiling. 
+   `OccQt` and `OccProjector` are subprojects. 
 ===   
 
 4. Traing: `partClassify.py`: TensorFlow model mixed data (images, category data)
@@ -75,9 +71,9 @@ The whole workflow has currently tested on Ubuntu only, while it should work on 
 
 5. Postprocessing: `plotModel.py`
 
+### OccProjector : depth-thickness view image generator
 
-
-## Dataset
+It is written in C++ using OpenCASCADE, see the Readme.md in this subproject.
 
 ### split for training data and testing data: 
 + for FreeCAD and KiCAD lib dataset, using `stratify.py` to extract 1 sample from 5 samples as test data. 
@@ -97,43 +93,85 @@ else:
     train_folder_name=None  # by a 80% ans 20% split
 ```
 
-### Tensorflow has ShapeNet ModelNet40
+
+## Datasets
+
+This paper has listed all the 3D CAD datasets found, here the preprocessing method for FreeCAD and KiCAD library is described.
+
+### Preproessed dataset are in `data` subfolder
+
+unzip the zip to release numpy file (containing image collection as multi-dimension array), and move npy file wit json file to somewhere
+
+
+```
+processed_3view_KiCAD_lib_imagedata.zip             
+processed_3view_KiCAD_lib_metadata.json    
+# six views 
+processed_nview_FreeCAD_lib_imagedata.zip
+processed_nview_FreeCAD_lib_metadata.json
+
+# tensorflow model checkout data
+6views_DT_cubebox_mixedinput_ModelNet10_feb12.h5
+6views_DT_cubebox_mixedinput_ModelNet10_feb12.h5.json 
+
+processed_cubebox_3view_ModelNet40_metadata.json
+processed_cubebox_3view_ModelNet40_imagedata.zip
+
+processed_cubebox_3view_ModelNet10_imagedata.zip
+processed_cubebox_3view_ModelNet10_metadata.json 
+```
+
+and then edit the INPUT_DATA_DIR and DATA_DIR in  `global_config.py`
+```py
+if not os.path.exists(DATA_DIR):
+    if platform.system() == "Linux":
+        INPUT_DATA_DIR = "/media/DataDir/"
+        DATA_DIR ="/media/DataDir/"  #output dir
+    else:  # windows OS
+        INPUT_DATA_DIR = "E:/AICAE_DataDir/"
+        DATA_DIR = "E:/AICAE_DataDir/"
+```
+finally, run the training `partClassify.py`
+`kicad_dataset` subfolder, also contains the traing history
+
+### ShapeNet ModelNet40 dataset
 
 https://www.tensorflow.org/graphics/api_docs/python/tfg/datasets/shapenet/Shapenet
 
-Aligined ModelNet40 dataset
-https://github.com/lmb-freiburg/orion
+Aligined ModelNet40 dataset  https://github.com/lmb-freiburg/orion
 
 
 ### FreeCAD library dataset
-filter out category that has too smaller item. Actually, it has been done auto by tensorflow
+
+hosted on github: https://github.com/FreeCAD/FreeCAD-library
+git clone it and edit parameters in `fc_parameter.py` and `dataGenerator.py`
+
+filter out category that has too smaller item. Actually, it has been done auto
 > WARN: group size is too small to split, skip this group
-
-fc_lib has only 3 groups for mechdata
-
-`tensorboard --logdir logs/scalars`  will plot the epoch_loss 
-
-Fasterners has 2 screws folders have been merged. (pull Feb 05, 2021)
 
 
 ### CAD-CAP: a 25,000-image database serving the development of artificial intelligence for capsule endoscopy
 
 ### Drexel CAD: no download link available
-model Datasets (http://edge.cs.drexel.edu/repository/)
+model Datasets (http://edge.cs.drexel.edu/repository/) is not downloadable
 
 ### Electronics 3D parts from KiCad project
 
+github repo: 
 https://github.com/KiCad/kicad-packages3D/tree/master/Crystal.3dshapes
 https://kicad.github.io/packages3d/
 
-STEP and WRL
+data STEP and WRL
 WRL files are an extension of the Virtual Reality Modeling Language (VRML) format .
 
-
 ### ShapeNetCore v2
-dataset is under evaluation, DTVModel has been modified to improve accuracy.
-Code related ShapeNetCore v2 is not published yet, will try 
 
+Code related ShapeNetCore v2 is not published yet, I have modified DTVCNN archicture a bit to improve accuracy. Training was done using computation resource in work place, can not get the code and preprocessed data out. 
+
+### Traceparts and gradcad website
+
+I have tried to download CAD models from <tracparts.com>, but it is not time-assuming even download with webscrape script. 
+The half-baken scripts are listed in <tracparts_download>
 
 
 

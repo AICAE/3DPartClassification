@@ -7,26 +7,26 @@ import os.path
 
 # try find preprocessed image and metadata in this repo, without preprocessing
 DATA_DIR = os.path.abspath(os.path.dirname(__file__)) +os.path.sep + "DataDir"
-# if not found, use machine specific path, for developer
+# if not found, use machine specific path, for developer/anyone want to reproduce this work
 if not os.path.exists(DATA_DIR):
     if platform.system() == "Linux":
         INPUT_DATA_DIR = "/media/DataDir/"
-        DATA_DIR="/media/DataDir/"
+        DATA_DIR="/media/DataDir/"  # output dir for checkpoint and history
     else:  # windows OS
-        INPUT_DATA_DIR = "F:/AICAE_DataDir/"
-        DATA_DIR = "F:/AICAE_DataDir/"
+        INPUT_DATA_DIR = "E:/AICAE_DataDir/"
+        DATA_DIR = "E:/AICAE_DataDir/"  # output dir
 
 # preprocessed images should be 60X60, left 4 pixels for random shifting (data augment)
 # training input data could be 64X64Xchannels after padding
 isPreprocessing = False          # False: for training only, skip preprocessing on Windows
 testing = False   #  True only for data preprocessing debugging purpose, using test data
 
-#dataset_name = "FreeCAD_lib"    # Mechanical CAD part library
+dataset_name = "FreeCAD_lib"    # Mechanical CAD part library
 #dataset_name = "KiCAD_lib"      # ECAD KiCAD library
 #dataset_name = "Thingi10K"      # all data in one folder, do not use, categorization not ideal
 #dataset_name =  "ModelNet10"    #  has two variants, ModelNet10 and ModelNet40
 #dataset_name =  "ModelNet40"
-dataset_name =  "ShapeNetCore"
+#dataset_name =  "ShapeNetCore"  # this work is done in workplace PC, source code not available
 
 isAlreadySplit = False  # split data by folder name 'test', 'train', 'validate'
 isModelNet40 = dataset_name == "ModelNet40"
@@ -44,7 +44,7 @@ usingCubeBoundBox = False   #  length, height, width for the boundbox is same le
 usingOBB = False  # use optimum orientation bound , False if models have been aligned/oriented
 
 # very slow (100 times slower for assembly) but more robust, for geometry input only
-# set False to use ray-triangulation-projection algorithm designed for this 
+# set False to use ray-triangulation-projection algorithm designed for this
 usingBOP = False
 # control data collector
 paddingImage = False  # let tensorflow do random padding for data augmentation if needed
