@@ -22,44 +22,7 @@ hasPerfileMetadata  = False  #  detected by replace input file suffix to json an
 isValidSubfolder = lambda dir: True   # dump subfolder filter, to be overidden if necessary
 
 if dataset_name == "Thingi10K":
-
-    isMeshFile = True    # choose between  part and mesh input format
-    hasPerfileMetadata  = True
-
-    ##############################
-    if testing:
-        input_root_path = "./testdata/testThingi10K_data"
-        output_root_path = input_root_path + "_output"
-        dataset_metadata_filename =  "testThingi10K_dataset.json"
-    else:
-        input_root_path = DATA_DIR + "Thingi10K_dataset"
-        output_root_path = DATA_DIR + "Thingi10K_dataset_output"
-        dataset_metadata_filename = "Thingi10K_dataset.json"
-
-    def collect_metadata():
-        # only works if all input files are in the same folder
-        metadata = {}
-        if hasPerfileMetadata:
-            # no needed for input format conversion
-            all_input_files = glob.glob(input_root_path  + os.path.sep  + "*." + metadata_suffix)
-            #print(all_input_files)
-        for input_file in all_input_files:
-            #print("process metadata for input file", input_file)
-            f = input_file.split(os.path.sep)[-1]
-            fileid = f[:f.rfind(".")]
-            with open(input_file, "r") as inf:
-                m = json.load(inf)
-            json_file_path = output_root_path + os.path.sep + str(fileid) + "_metadata.json"
-            if(os.path.exists(json_file_path)):
-                pm = json.load(open(json_file_path, "r"))
-                for k, v in pm.items():
-                    m[k] = v
-                metadata[fileid] = m
-            else:
-                print("Warning: there is no generated metdata file", json_file_path)
-        return metadata
-
-        # collect from  output folder
+    from thingi10k_parameters import *
 
     ###########################
 elif dataset_name.find("ModelNet") >= 0:
@@ -68,7 +31,7 @@ elif dataset_name.find("ModelNet") >= 0:
     hasPerfileMetadata  = False  # where is the metadata like tag and c
 
     ##############################
-    if testing:
+    if testing and is_developer_mode:
         input_root_path = "./testdata/testModelNet_data"
         output_root_path = input_root_path  + "_output"
         dataset_metadata_filename = "testModelNet_dataset.json"
@@ -83,10 +46,7 @@ elif dataset_name.find("ModelNet") >= 0:
             dataset_dir_path = DATA_DIR + dataset_full_name + "_output"
             dataset_metadata_filename = dataset_full_name + "_dataset.json"
         else:
-            input_root_path = DATA_DIR + "ModelNet10"
-            output_root_path = DATA_DIR + "ModelNet10_output"
-            dataset_dir_path = output_root_path
-            dataset_metadata_filename = "ModelNet10_dataset.json"
+            pass # use default config for path
 
 elif dataset_name.find("ShapeNetCore") >= 0:
     isMeshFile = True    # choose between  part and mesh input format
@@ -94,15 +54,12 @@ elif dataset_name.find("ShapeNetCore") >= 0:
     hasPerfileMetadata  = False  # where is the metadata like tag and c
 
     ##############################
-    if testing:
+    if testing and is_developer_mode:
         input_root_path = "./testdata/ShapeNetCore_data"
         output_root_path = input_root_path  + "_output"
         dataset_metadata_filename = "testShapeNetCore_dataset.json"
     else:
-        input_root_path = DATA_DIR + "ShapeNetCore"
-        output_root_path = DATA_DIR + "ShapeNetCore_output"
-        dataset_dir_path = output_root_path
-        dataset_metadata_filename = "ShapeNetCore_dataset.json"
+        pass # use default config for path
 
 elif dataset_name == "KiCAD_lib":
     from kicad_parameters import *
@@ -162,7 +119,9 @@ MultiViewApp=os.path.dirname(os.path.abspath(__file__)) + os.path.sep + "occQt/o
 ##############################
 image_suffix = ".png"
 
-############## image preprocessing ############
+############## 
+# image preprocessing
+#############
 binarizingImage = not generatingThicknessViewImage
 compressingImage = False and binarizingImage
 concatingImage = False # do not concat !!!, so image can be flipped, and have view pooling
@@ -201,7 +160,10 @@ else:
     model_input_shape = [view_count, model_input_height, model_input_width, channel_count]
 
 #########################################################################################
-########### dataset save control #########
+
+########### 
+# dataset save control 
+##########
 if testing:
     dataset_dir_path = output_root_path
     if os.path.exists(output_root_path):

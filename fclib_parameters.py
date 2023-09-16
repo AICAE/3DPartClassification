@@ -1,15 +1,16 @@
+##########################
+# FreeCAD standard part library
+#########################
+# download part data and generate classification by folder structure
+
 from __future__ import print_function, division
 import os
 import os.path
 
 
 from global_config import *
-##########################
-# FreeCAD standard part library
-#########################
-# download part data and generate classification by folder structure
 
-testing = False
+
 MechanicalOnly = True  # no electronics parts
 splittingFastenerCategory = True
 splittingProfileCategory = True
@@ -35,14 +36,13 @@ image_height = 480
 
 
 ################# IO path #################
-if testing:
+if testing and is_developer_mode:
     input_root_path = "./testdata/testFreeCAD_lib"
     output_root_path = input_root_path + "_output"
     dataset_metadata_filename =  output_root_path + "/test_data.json"
-else:
-    output_root_path = DATA_DIR + "freecad_library_output"
-    dataset_dir_path = DATA_DIR + "freecad_library_output"
 
+if is_developer_mode:
+    # this path is only valid for developer
     if MechanicalOnly:
         input_root_path = DATA_DIR + "FreeCAD-library/Mechanical Parts"
         dataset_metadata_filename = "mechdata.json"

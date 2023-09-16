@@ -1,22 +1,18 @@
+##########################
+# KiCAD standard package library
+#########################
+# download part data and generate classification by folder structure
+
 from __future__ import print_function, division
 import os
 import os.path
 
 
 from global_config import *
-##########################
-# FreeCAD standard part library
-#########################
-# download part data and generate classification by folder structure
 
-testing = False
 if testing:
     minimum_sample_count = 1  # set in global_config
 
-splittingFastenerCategory = True
-splittingProfileCategory = True
-# profile should also be split, but manually
-# can be further limited to fasteners of Mechanical parts
 
 # lower(), some fcstd may does not have step corresponding, some may have only step
 supported_input_file_suffices = set(["stp", "step"])  # "FCStd"
@@ -41,30 +37,23 @@ KiCAD_Categories = ["Connector_Molex", "Connector_Phoenix_MC", 'Connector_Dsub'
 # Resistor_SMD and capacitor SMD may look similar
 # Inductor_SMD and Capacitor_SMD can not been distuished by shape
 
-###########################
-# generate image by python + command line program written in C++
-#if generatingMultiViewImage:
-displayingMode = "Shaded"  # "WireFrame"
-# input image  size dumped from 3D views
-image_width = 480
-image_height = 480
-
-
 ################# IO path #################
 isMeshFile = False
 hasPerfileMetadata  = False
 supported_input_file_suffices = set(["stp", "step"])
 input_file_suffix = "step"
-if testing:
+if testing and is_developer_mode:
     input_root_path = "./testdata/testKiCAD_data"
     output_root_path = input_root_path + "_output"
     dataset_dir_path = input_root_path
     dataset_metadata_filename = "testKiCAD_dataset.json"
-else:
+
+if is_developer_mode:
     input_root_path = INPUT_DATA_DIR + "kicad-packages3D"
-    output_root_path = INPUT_DATA_DIR + "kicad-packages3D_output"
-    dataset_dir_path = DATA_DIR + "kicad-packages3D"
+    output_root_path = DATA_DIR + "kicad-packages3D_output"
+    dataset_dir_path = INPUT_DATA_DIR + "kicad-packages3D"
     dataset_metadata_filename = "kicad-packages3D_dataset.json"
+# else, if the global config for path
 
 def isValidSubfolder(dir):
     if not dir.endswith(".3dshapes"):
