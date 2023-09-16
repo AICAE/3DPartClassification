@@ -35,7 +35,8 @@ elif dataset_name.find("ModelNet") >= 0:
         input_root_path = "./testdata/testModelNet_data"
         output_root_path = input_root_path  + "_output"
         dataset_metadata_filename = "testModelNet_dataset.json"
-    else:
+    
+    if is_developer_mode:
         if isModelNet40:
             if isModelNet40Aligned:
                 dataset_full_name = "ModelNet40Aligned"
@@ -70,9 +71,10 @@ elif dataset_name == "FreeCAD_lib":
 else:
     print(dataset_name, "dataset not supported, check spelling")
 
-if generatingThicknessViewImage:
-    output_root_path = output_root_path + "_thickness"
-    dataset_dir_path = dataset_dir_path + "_thickness"
+if is_developer_mode:
+    if generatingThicknessViewImage:
+        output_root_path = output_root_path + "_thickness"
+        dataset_dir_path = dataset_dir_path + "_thickness"
 
 ##########################
 # preprocessing  meshlib meshed part dataset_metadata_filename
@@ -191,6 +193,7 @@ else:
 processed_imagedata_filepath = dataset_dir_path + os.path.sep + _processed_imagedata_filename
 _processed_metadata_filename = _processed_imagedata_filename[:-14] + "_metadata.json"
 processed_metadata_filepath = dataset_dir_path + os.path.sep + _processed_metadata_filename
+
 ######################################################################################
 ## saved model file to continue model fit
 _saved_model_name = dataset_name

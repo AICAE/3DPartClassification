@@ -5,8 +5,8 @@ the main app for part classification
 
 
 _debug = True
-_using_saved_model = True #
-_calculating_gflops = False 
+_using_saved_model = True # use the checkpoint
+_calculating_gflops = False # calc computation cost
 
 BATCH_SIZE = 200  # if dataset is small, make this bigger
 EPOCH_COUNT = 50
@@ -18,9 +18,13 @@ import pandas as pd
 import argparse
 import locale
 import os
+import sys
 import json
 import tempfile
 
+# before import tensorflow
+import logging
+#logging.getLogger("tensorflow").setLevel(logging.ERROR)
 
 from global_config import dataset_name,  channel_count, thickness_channel, depthmap_channel,  \
     usingOnlyThicknessChannel, usingOnlyDepthmapChannel, usingMixedInputModel, usingKerasTuner, usingMaxViewPooling
@@ -28,10 +32,10 @@ from input_parameters import view_count, model_input_shape, processed_metadata_f
 
 print("[INFO] loading classification data in metadata file: ", processed_metadata_filepath)
 df = pd.read_json(processed_metadata_filepath)
+if not os.path.exists(processed_imagedata_filepath):
+    logging.error(f"processed_imagedata_filepath = {processed_imagedata_filepath} does not exist, have you forget to unzip the npy file?")
+    sys.exit()
 
-# before import tensorflow
-import logging
-#logging.getLogger("tensorflow").setLevel(logging.ERROR)
 
 # import the necessary packages
 import tensorflow
@@ -78,7 +82,6 @@ from stratify import my_split
 #args = vars(ap.parse_args())
 
 ##################################
-
 images = np.load(processed_imagedata_filepath)  # pickle array of object type: allow_pickle=True
 print("[INFO] loaded images ndarray shape from file", images.shape, images.dtype)
 
@@ -171,8 +174,6 @@ scaled_feature_array = scaler.fit_transform(df[raw_FEATURES])  # fine here, scal
 
 for i, c in enumerate(raw_FEATURES):  # feature_columns
     df[c+"_scaled"] = scaled_feature_array[:, i]
-
-### bug: all scaled data are nan, why?
 
 # some cat has very few samples, make sure they are in train set
 
@@ -303,6 +304,7 @@ if _calculating_gflops:
 
     tf.compat.v1.reset_default_graph()
     print("[INFO] GPLOPS for this DTVCNN model is: ", flops.total_float_ops / 1e9)
+    sys.exit()
 
 #####################################
 # LearningRate = LearningRate * 1/(1 + decay * epoch)
