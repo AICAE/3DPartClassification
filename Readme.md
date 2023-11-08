@@ -1,11 +1,19 @@
-# 3DTV-CNN: Deep learning on 3D CAD geometry classification
+# 3DTV-CNN: Deep learning on 3D CAD shape classification
 
-DTV-CNN: deep learning on fusion of depth and thickness views for 3D shape classification for CAD software
+This repo contains source code and preprocessed data for the paper:
+[Qingfeng Xia](https://www.researchgate.net/profile/Qingfeng_Xia),
+[DTV-CNN: deep learning on fusion of depth and thickness views for 3D shape classification](https://www.sciencedirect.com/science/article/pii/S2405844023087236),
+Heliyon,
+Volume 9, Issue 11,
+2023,
+e21515,
+ISSN 2405-8440,
+https://doi.org/10.1016/j.heliyon.2023.e21515.
 
-Qingfeng Xia
-https://www.researchgate.net/profile/Qingfeng_Xia
 
-MIT licensed  2019-2023
+
+MIT licensed 
+Copyright Qingfeng Xia 2019-2023
 
 ---
 
